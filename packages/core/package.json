@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "pnpm --filter @spawncamper/core exec tsx src/dev.ts",
+    "dev-og": "tsc --watch"
   }
 }

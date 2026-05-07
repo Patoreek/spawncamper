@@ -14,5 +14,8 @@
     "build": "tsc",
     "dev": "tsx --env-file=../../.env src/dev.ts",
     "dev-og": "tsc --watch"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
   }
 }

@@ -8,9 +8,12 @@ export const createProduct = (input: CreateProductInput): Product => {
   return productDAL.create(input);
 };
 
-const pauseProduct = async (id: string) => {
-  const result = 0;
-  return result;
+export const pauseProduct = async (id: number) => {
+  return productDAL.pauseProduct(id);
+};
+
+export const activateProduct = async (id: string) => {
+  // return productDAL.activateProduct(id);
 };
 
 const archiveProduct = async (id: string) => {

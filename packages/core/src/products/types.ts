@@ -1,12 +1,19 @@
-export interface Product {
-    id: number;
-    name: string;
-    target_price: number;
-    status: string;
-    created_at?: string;
-    updated_at?: string;
+export type ProductStatus = 'active' | 'paused' | 'archived';
+
+export interface CreateProductInput {
+  name: string;
+  target_price?: number | null;
+  status?: ProductStatus;
 }
 
+export interface Product {
+  id: number;
+  name: string;
+  target_price: number | null;
+  status: ProductStatus;
+  created_at: string;
+  updated_at: string;
+}
 export const mockProduct = {
     id: 1,
     name: "Test",

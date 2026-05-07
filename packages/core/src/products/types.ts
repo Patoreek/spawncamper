@@ -14,9 +14,17 @@ export interface Product {
   created_at: string;
   updated_at: string;
 }
-export const mockProduct = {
-    id: 1,
+
+export const mockNewProduct:CreateProductInput = {
     name: "Test",
     target_price: 12.50,
     status: "active"
+}
+export const mockProduct:Product = {
+    id: 1,
+    name: "Test",
+    target_price: 12.50,
+    status: "active",
+    created_at: '2026-01-01',
+    updated_at: '2026-01-01'
 }

@@ -1,3 +1,3 @@
-import { testDBConnection } from "./db";
+import { testDBConnection } from "./db/db";
 
 testDBConnection();

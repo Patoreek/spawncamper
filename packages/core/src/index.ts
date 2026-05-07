@@ -9,32 +9,6 @@
 // send notification to telegram
 // LATER: Purchase bot that has my credientials and can purchase a product?
 
-
-
-const createProduct = async (product: []) => {
-  const result = 0;
-  return result;
-}
-
-const pauseProduct = async (id: string) => {
-  const result = 0;
-  return result;
-}
-
-const archiveProduct = async (id: string) => {
-  const result = 0;
-  return result;
-}
-
-const deleteProduct = async (id: string) => {
-  const result = 0;
-  return result;
-}
-
-const getActiveProducts = async (): Promise<string[]> => {
-  return [];
-} 
-
 const storeResults = async (): Promise<string[]> => {
   return [];
 }

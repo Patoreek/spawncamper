@@ -33,6 +33,7 @@ export class ProductDAL {
   private readonly createStmt: Database.Statement;
   private readonly findByIdStmt: Database.Statement;
   private readonly findAllStmt: Database.Statement;
+  private readonly findAllByStatusStmt: Database.Statement;
   private readonly pauseProductStmt: Database.Statement;
 
   constructor(db: Database.Database) {
@@ -44,7 +45,12 @@ export class ProductDAL {
     `);
 
     this.findByIdStmt = db.prepare(`SELECT * FROM products WHERE id = @id`);
-    this.findAllStmt = db.prepare(`SELECT * FROM products`);
+    this.findAllStmt = db.prepare(`SELECT * FROM products ORDER BY id DESC`);
+    this.findAllByStatusStmt = db.prepare(`
+      SELECT * FROM products
+      WHERE status = @status
+      ORDER BY id DESC
+    `);
     this.pauseProductStmt = db.prepare(`
       UPDATE products
       SET status = 'paused', updated_at = CURRENT_TIMESTAMP
@@ -53,7 +59,7 @@ export class ProductDAL {
     // activatate
     // archive
     // delete
-  } 
+  }
 
   create(input: CreateProductInput): Product {
     return this.createStmt.get({
@@ -67,11 +73,9 @@ export class ProductDAL {
     return (this.findByIdStmt.get({ id }) as Product | undefined) ?? null;
   }
 
-  findAll(status: string | null): Product[] {
-    if (status) {
-      return this.findAllStmt.all({ status }) as Product[];
-    }
-    return this.findAllStmt.all() as Product[];
+  findAll(status: string | null = null): Product[] {
+    if (status === null) return this.findAllStmt.all() as Product[];
+    return this.findAllByStatusStmt.all({ status }) as Product[];
   }
 
   pauseProduct(id: number): ApiResponse {

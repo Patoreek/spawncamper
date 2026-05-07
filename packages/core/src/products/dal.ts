@@ -4,6 +4,7 @@ import type { CreateProductInput, Product } from './types';
 export class ProductDAL {
   private readonly createStmt: Database.Statement;
   private readonly findByIdStmt: Database.Statement;
+  private readonly findAllStmt: Database.Statement;
 
   constructor(db: Database.Database) {
     // Prepare once, reuse forever — much faster than re-preparing per call
@@ -14,6 +15,7 @@ export class ProductDAL {
     `);
 
     this.findByIdStmt = db.prepare(`SELECT * FROM products WHERE id = @id`);
+    this.findAllStmt = db.prepare(`SELECT * FROM products`);
   }
 
   create(input: CreateProductInput): Product {
@@ -26,5 +28,11 @@ export class ProductDAL {
 
   findById(id: number): Product | null {
     return (this.findByIdStmt.get({ id }) as Product | undefined) ?? null;
+  }
+
+  findAll(status: string | null): Product[] {
+    const queryResults: Product[] = this.findAllStmt.get();
+    console.log('QUERY RESULT:', queryResults);
+    return queryResults;
   }
 }

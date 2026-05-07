@@ -23,6 +23,6 @@ const deleteProduct = async (id: string) => {
   return result;
 };
 
-const getActiveProducts = async (): Promise<string[]> => {
-  return [];
+export const getAllProducts = (status: string | null = null): Product[] => {
+  return productDAL.findAll(status);
 };

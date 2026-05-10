@@ -35,6 +35,9 @@ export class ProductDAL {
   private readonly findAllStmt: Database.Statement;
   private readonly findAllByStatusStmt: Database.Statement;
   private readonly pauseProductStmt: Database.Statement;
+  private readonly activateProductStmt: Database.Statement;
+  private readonly archiveProductStmt: Database.Statement;
+  private readonly deleteProductStmt: Database.Statement;
 
   constructor(db: Database.Database) {
     // Prepare once, reuse forever — much faster than re-preparing per call
@@ -43,7 +46,6 @@ export class ProductDAL {
       VALUES (@name, @target_price, @status)
       RETURNING *
     `);
-
     this.findByIdStmt = db.prepare(`SELECT * FROM products WHERE id = @id`);
     this.findAllStmt = db.prepare(`SELECT * FROM products ORDER BY id DESC`);
     this.findAllByStatusStmt = db.prepare(`
@@ -56,9 +58,20 @@ export class ProductDAL {
       SET status = 'paused', updated_at = CURRENT_TIMESTAMP
       WHERE id = @id
     `);
-    // activatate
-    // archive
-    // delete
+    this.activateProductStmt = db.prepare(`
+      UPDATE products
+      SET status = 'active', updated_at = CURRENT_TIMESTAMP
+      WHERE id = @id
+    `);
+    this.archiveProductStmt = db.prepare(`
+      UPDATE products
+      SET status = 'archived', updated_at = CURRENT_TIMESTAMP
+      WHERE id = @id
+    `);
+    this.deleteProductStmt = db.prepare(`
+      DELETE FROM products
+      WHERE id = @id
+    `);
   }
 
   create(input: CreateProductInput): Product {
@@ -98,17 +111,61 @@ export class ProductDAL {
   };
   
   activateProduct(id: number) {
-    const result = 0;
-    return result;
+    const result = this.activateProductStmt.run({ id: Number(id)});
+    if (result.changes === 0){
+      return {
+        success: false,
+        error: {
+          code: 'PRODUCT_NOT_FOUND',
+          message: `No product found with id ${id}`,
+        },
+        meta: { timestamp: new Date().toISOString() },
+      };
+    }
+    return {
+      success: true,
+      message: `Product ${id} activated`,
+      meta: { timestamp: new Date().toISOString() },
+    };
   };
 
   archiveProduct(id: number) {
-    const result = 0;
-    return result;
+    const result = this.archiveProductStmt.run({ id: Number(id)});
+    if (result.changes === 0){
+      return {
+        success: false,
+        error: {
+          code: 'PRODUCT_NOT_FOUND',
+          message: `No product found with id ${id}`,
+        },
+        meta: { timestamp: new Date().toISOString() },
+      };
+    }
+    return {
+      success: true,
+      message: `Product ${id} archived`,
+      meta: { timestamp: new Date().toISOString() },
+    };
   };
   
   deleteProduct(id: number) {
-    const result = 0;
-    return result;
+    const result = this.deleteProductStmt.run({ id: Number(id)});
+    if (result.changes === 0){
+      return {
+        success: false,
+        error: {
+          code: 'PRODUCT_NOT_FOUND',
+          message: `No product found with id ${id}`,
+        },
+        meta: { timestamp: new Date().toISOString() },
+      };
+    }
+    return {
+      success: true,
+      message: `Product ${id} deleted`,
+      meta: { timestamp: new Date().toISOString() },
+    };
   };
+
+
 }

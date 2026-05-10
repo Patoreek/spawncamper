@@ -12,18 +12,16 @@ export const pauseProduct = async (id: number) => {
   return productDAL.pauseProduct(id);
 };
 
-export const activateProduct = async (id: string) => {
-  // return productDAL.activateProduct(id);
+export const activateProduct = async (id: number) => {
+  return productDAL.activateProduct(id);
 };
 
-const archiveProduct = async (id: string) => {
-  const result = 0;
-  return result;
+export const archiveProduct = async (id: number) => {
+  return productDAL.archiveProduct(id);
 };
 
-const deleteProduct = async (id: string) => {
-  const result = 0;
-  return result;
+export const deleteProduct = async (id: number) => {
+  return productDAL.deleteProduct(id);
 };
 
 export const getAllProducts = (status: string | null = null): Product[] => {

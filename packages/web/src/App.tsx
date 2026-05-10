@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Product, ProductUrl, ProductStatus } from './types'
+import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary } from './types'
 import * as api from './api'
 import './App.css'
 
@@ -8,11 +8,21 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null)
   const [urlsByProduct, setUrlsByProduct] = useState<Record<number, ProductUrl[]>>({})
+  const [latestPrices, setLatestPrices] = useState<Record<number, LatestPriceCheck[]>>({})
+  const [summaries, setSummaries] = useState<Record<number, ProductPriceSummary>>({})
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [checkingProduct, setCheckingProduct] = useState<number | null>(null)
+  const [scanningUrl, setScanningUrl] = useState<number | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   const loadProducts = async () => {
     const data = await api.fetchProducts(statusFilter || undefined)
     setProducts(data)
+    // Fetch summaries for all products so table columns are populated
+    const entries = await Promise.all(
+      data.map(async (p) => [p.id, await api.fetchPriceSummary(p.id)] as const)
+    )
+    setSummaries(Object.fromEntries(entries))
   }
 
   useEffect(() => { loadProducts() }, [statusFilter])
@@ -23,8 +33,12 @@ function App() {
       return
     }
     setExpandedProduct(productId)
-    const urls = await api.fetchProductUrls(productId)
+    const [urls, prices] = await Promise.all([
+      api.fetchProductUrls(productId),
+      api.fetchLatestPrices(productId),
+    ])
     setUrlsByProduct((prev) => ({ ...prev, [productId]: urls }))
+    setLatestPrices((prev) => ({ ...prev, [productId]: prices }))
   }
 
   const handleStatusChange = async (id: number, action: 'pause' | 'activate' | 'archive') => {
@@ -53,12 +67,51 @@ function App() {
     handleUrlAdded(productId)
   }
 
+  const refreshSummary = async (productId: number) => {
+    const [prices, summary] = await Promise.all([
+      api.fetchLatestPrices(productId),
+      api.fetchPriceSummary(productId),
+    ])
+    setLatestPrices((prev) => ({ ...prev, [productId]: prices }))
+    setSummaries((prev) => ({ ...prev, [productId]: summary }))
+  }
+
+  const handleCheckPrices = async (productId: number) => {
+    setCheckingProduct(productId)
+    try {
+      await api.checkProductPrices(productId)
+      await refreshSummary(productId)
+    } finally {
+      setCheckingProduct(null)
+    }
+  }
+
+  const handleScanUrl = async (productId: number, urlId: number) => {
+    setScanningUrl(urlId)
+    setScanError(null)
+    try {
+      await api.scanProductUrl(urlId)
+      await refreshSummary(productId)
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Scan failed')
+    } finally {
+      setScanningUrl(null)
+    }
+  }
+
+  const getPriceForUrl = (productId: number, urlId: number): LatestPriceCheck | undefined => {
+    return latestPrices[productId]?.find((p) => p.product_url_id === urlId)
+  }
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>Spawncamper</h1>
         <p>Product price tracker</p>
       </header>
+
+      <UrlScanner />
+      <CronPanel />
 
       <div className="toolbar">
         <div className="filter-group">
@@ -81,63 +134,262 @@ function App() {
         />
       )}
 
-      <div className="product-list">
-        {products.length === 0 && (
-          <p className="empty-state">No products found. Create one to get started.</p>
-        )}
-        {products.map((product) => (
-          <div key={product.id} className="product-card">
-            <div className="product-header" onClick={() => toggleExpand(product.id)}>
-              <div className="product-info">
-                <h3>{product.name}</h3>
-                <div className="product-meta">
-                  <StatusBadge status={product.status} />
-                  {product.target_price != null && (
-                    <span className="target-price">${product.target_price.toFixed(2)}</span>
-                  )}
-                </div>
-              </div>
-              <span className="expand-icon">{expandedProduct === product.id ? '▾' : '▸'}</span>
-            </div>
-
-            {expandedProduct === product.id && (
-              <div className="product-detail">
-                <div className="product-actions">
-                  {product.status !== 'active' && (
-                    <button className="btn btn-sm btn-success" onClick={() => handleStatusChange(product.id, 'activate')}>Activate</button>
-                  )}
-                  {product.status === 'active' && (
-                    <button className="btn btn-sm btn-warn" onClick={() => handleStatusChange(product.id, 'pause')}>Pause</button>
-                  )}
-                  {product.status !== 'archived' && (
-                    <button className="btn btn-sm btn-muted" onClick={() => handleStatusChange(product.id, 'archive')}>Archive</button>
-                  )}
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product.id)}>Delete</button>
-                </div>
-
-                <div className="urls-section">
-                  <h4>URLs</h4>
-                  <UrlList
-                    urls={urlsByProduct[product.id] ?? []}
-                    productId={product.id}
-                    onPause={handlePauseUrl}
-                    onDelete={handleDeleteUrl}
-                  />
-                  <AddUrlForm productId={product.id} onAdded={() => handleUrlAdded(product.id)} />
-                </div>
-              </div>
-            )}
+      {products.length === 0 ? (
+        <p className="empty-state">No products found. Create one to get started.</p>
+      ) : (
+        <div className="product-table">
+          <div className="table-header">
+            <span className="col-name">Product</span>
+            <span className="col-status">Status</span>
+            <span className="col-price">Initial</span>
+            <span className="col-price">Lowest</span>
+            <span className="col-store">Best Store</span>
+            <span className="col-change">Change</span>
+            <span className="col-expand"></span>
           </div>
-        ))}
-      </div>
+
+          {products.map((product) => {
+            const s = summaries[product.id]
+            const isExpanded = expandedProduct === product.id
+            const hasPriceData = s && s.initialPrice !== null
+
+            return (
+              <div key={product.id} className={`table-row-group ${isExpanded ? 'expanded' : ''}`}>
+                <div className="table-row" onClick={() => toggleExpand(product.id)}>
+                  <span className="col-name">
+                    <span className="product-name">{product.name}</span>
+                    {product.target_price != null && (
+                      <span className="target-price">Target: ${product.target_price.toFixed(2)}</span>
+                    )}
+                  </span>
+                  <span className="col-status">
+                    <StatusBadge status={product.status} />
+                  </span>
+                  <span className="col-price mono">
+                    {hasPriceData ? `$${s.initialPrice!.toFixed(2)}` : '--'}
+                  </span>
+                  <span className="col-price mono lowest-price">
+                    {hasPriceData ? `$${s.currentLowest!.toFixed(2)}` : '--'}
+                  </span>
+                  <span className="col-store">
+                    {hasPriceData && s.currentLowestRetailer ? s.currentLowestRetailer : '--'}
+                  </span>
+                  <span className="col-change">
+                    {hasPriceData ? (
+                      <ChangeIndicator value={s.percentageDecrease} />
+                    ) : '--'}
+                  </span>
+                  <span className="col-expand">
+                    <span className="expand-icon">{isExpanded ? '▾' : '▸'}</span>
+                  </span>
+                </div>
+
+                {isExpanded && (
+                  <div className="table-detail">
+                    <div className="product-actions">
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={(e) => { e.stopPropagation(); handleCheckPrices(product.id) }}
+                        disabled={checkingProduct === product.id}
+                      >
+                        {checkingProduct === product.id ? 'Checking...' : 'Check Prices'}
+                      </button>
+                      {product.status !== 'active' && (
+                        <button className="btn btn-sm btn-success" onClick={() => handleStatusChange(product.id, 'activate')}>Activate</button>
+                      )}
+                      {product.status === 'active' && (
+                        <button className="btn btn-sm btn-warn" onClick={() => handleStatusChange(product.id, 'pause')}>Pause</button>
+                      )}
+                      {product.status !== 'archived' && (
+                        <button className="btn btn-sm btn-muted" onClick={() => handleStatusChange(product.id, 'archive')}>Archive</button>
+                      )}
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product.id)}>Delete</button>
+                    </div>
+
+                    <div className="urls-section">
+                      <h4>URLs</h4>
+                      {scanError && <p className="scan-error">{scanError}</p>}
+                      <UrlList
+                        urls={urlsByProduct[product.id] ?? []}
+                        productId={product.id}
+                        onPause={handlePauseUrl}
+                        onDelete={handleDeleteUrl}
+                        onScan={handleScanUrl}
+                        scanningUrl={scanningUrl}
+                        getPriceForUrl={(urlId) => getPriceForUrl(product.id, urlId)}
+                      />
+                      <AddUrlForm productId={product.id} onAdded={() => handleUrlAdded(product.id)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Sub-components ──────────────────────────────────────
 
+function ChangeIndicator({ value }: { value: number | null }) {
+  if (value === null || value === 0) return <span className="change-neutral">0%</span>
+  if (value > 0) return <span className="change-down">-{value.toFixed(1)}%</span>
+  return <span className="change-up">+{Math.abs(value).toFixed(1)}%</span>
+}
+
 function StatusBadge({ status }: { status: ProductStatus }) {
   return <span className={`badge badge-${status}`}>{status}</span>
+}
+
+function CronPanel() {
+  const [cronStatus, setCronStatus] = useState<CronStatus | null>(null)
+  const [triggering, setTriggering] = useState(false)
+
+  const loadStatus = async () => {
+    const status = await api.fetchCronStatus()
+    setCronStatus(status)
+  }
+
+  useEffect(() => {
+    loadStatus()
+    const interval = setInterval(loadStatus, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleTrigger = async () => {
+    setTriggering(true)
+    await api.triggerCronRun()
+    setTimeout(loadStatus, 1000)
+    setTriggering(false)
+  }
+
+  return (
+    <div className="panel cron-panel">
+      <div className="panel-header">
+        <h3>Scheduled Checks</h3>
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={handleTrigger}
+          disabled={triggering || cronStatus?.isRunning === true}
+        >
+          {cronStatus?.isRunning ? 'Running...' : triggering ? 'Starting...' : 'Run All Now'}
+        </button>
+      </div>
+      {cronStatus && (
+        <div className="cron-details">
+          <div className="cron-row">
+            <span className="cron-label">Schedule</span>
+            <span>{cronStatus.schedule}</span>
+          </div>
+          <div className="cron-row">
+            <span className="cron-label">Status</span>
+            <span>
+              {cronStatus.isRunning ? (
+                <span className="badge badge-active">Running</span>
+              ) : cronStatus.lastRunStatus === 'success' ? (
+                <span className="badge badge-active">Last run OK</span>
+              ) : cronStatus.lastRunStatus === 'error' ? (
+                <span className="badge badge-paused">Last run failed</span>
+              ) : (
+                <span className="badge badge-archived">No runs yet</span>
+              )}
+            </span>
+          </div>
+          {cronStatus.lastRunAt && (
+            <>
+              <div className="cron-row">
+                <span className="cron-label">Last run</span>
+                <span>{formatDate(cronStatus.lastRunAt)}</span>
+              </div>
+              <div className="cron-row">
+                <span className="cron-label">Checked</span>
+                <span>{cronStatus.productsChecked} products, {cronStatus.urlsChecked} URLs</span>
+              </div>
+            </>
+          )}
+          {cronStatus.lastRunError && (
+            <div className="cron-row cron-error">
+              <span className="cron-label">Error</span>
+              <span>{cronStatus.lastRunError}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UrlScanner() {
+  const [url, setUrl] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [result, setResult] = useState<UrlData | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleScan = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!url.trim()) return
+    setScanning(true)
+    setResult(null)
+    setError(null)
+    try {
+      const data = await api.scanArbitraryUrl(url.trim())
+      if ('error' in data) {
+        setError((data as any).error?.message || 'Scan failed')
+      } else {
+        setResult(data)
+      }
+    } catch {
+      setError('Failed to scan URL')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  return (
+    <div className="panel scanner-panel">
+      <h3>URL Scanner</h3>
+      <p className="panel-desc">Test any product URL to see extracted price data</p>
+      <form className="scanner-form" onSubmit={handleScan}>
+        <input
+          type="url"
+          placeholder="https://www.example.com/product..."
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          required
+        />
+        <button className="btn btn-primary" type="submit" disabled={scanning}>
+          {scanning ? 'Scanning...' : 'Scan'}
+        </button>
+      </form>
+      {result && (
+        <div className="scan-result">
+          <div className="scan-result-row">
+            <span className="scan-label">Price</span>
+            <span className="scan-price">
+              {result.price !== null ? `${result.currency === 'USD' ? '$' : result.currency + ' '}${result.price.toFixed(2)}` : 'Not found'}
+            </span>
+          </div>
+          {result.title && (
+            <div className="scan-result-row">
+              <span className="scan-label">Title</span>
+              <span>{result.title}</span>
+            </div>
+          )}
+          <div className="scan-result-row">
+            <span className="scan-label">Stock</span>
+            <span>{result.in_stock ? 'In Stock' : 'Out of Stock'}</span>
+          </div>
+          <div className="scan-result-row">
+            <span className="scan-label">Source</span>
+            <span className="badge badge-archived">{result.source}</span>
+          </div>
+        </div>
+      )}
+      {error && <p className="scan-error">{error}</p>}
+    </div>
+  )
 }
 
 function CreateProductForm({ onCreated }: { onCreated: () => void }) {
@@ -190,32 +442,63 @@ function UrlList({
   productId,
   onPause,
   onDelete,
+  onScan,
+  scanningUrl,
+  getPriceForUrl,
 }: {
   urls: ProductUrl[]
   productId: number
   onPause: (productId: number, urlId: number) => void
   onDelete: (productId: number, urlId: number) => void
+  onScan: (productId: number, urlId: number) => void
+  scanningUrl: number | null
+  getPriceForUrl: (urlId: number) => LatestPriceCheck | undefined
 }) {
   if (urls.length === 0) return <p className="empty-urls">No URLs added yet.</p>
 
   return (
     <ul className="url-list">
-      {urls.map((u) => (
-        <li key={u.id} className={u.active ? '' : 'url-inactive'}>
-          <div className="url-info">
-            <span className="url-retailer">{u.retailer}</span>
-            <a href={u.url} target="_blank" rel="noopener noreferrer" className="url-link">
-              {u.url}
-            </a>
-          </div>
-          <div className="url-actions">
-            {u.active && (
-              <button className="btn btn-xs btn-warn" onClick={() => onPause(productId, u.id)}>Pause</button>
-            )}
-            <button className="btn btn-xs btn-danger" onClick={() => onDelete(productId, u.id)}>Delete</button>
-          </div>
-        </li>
-      ))}
+      {urls.map((u) => {
+        const priceData = getPriceForUrl(u.id)
+        return (
+          <li key={u.id} className={u.active ? '' : 'url-inactive'}>
+            <div className="url-info">
+              <div className="url-top-row">
+                <span className="url-retailer">{u.retailer}</span>
+                {priceData && (
+                  <span className="url-price">
+                    ${priceData.price.toFixed(2)}
+                    <span className={`stock-indicator ${priceData.in_stock ? 'in-stock' : 'out-of-stock'}`}>
+                      {priceData.in_stock ? 'In Stock' : 'Out of Stock'}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <a href={u.url} target="_blank" rel="noopener noreferrer" className="url-link">
+                {u.url}
+              </a>
+              {priceData && (
+                <span className="url-checked-at">
+                  Last checked: {formatDate(priceData.created_at)}
+                </span>
+              )}
+            </div>
+            <div className="url-actions">
+              <button
+                className="btn btn-xs btn-primary"
+                onClick={() => onScan(productId, u.id)}
+                disabled={scanningUrl === u.id}
+              >
+                {scanningUrl === u.id ? 'Scanning...' : 'Scan'}
+              </button>
+              {u.active && (
+                <button className="btn btn-xs btn-warn" onClick={() => onPause(productId, u.id)}>Pause</button>
+              )}
+              <button className="btn btn-xs btn-danger" onClick={() => onDelete(productId, u.id)}>Delete</button>
+            </div>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -262,6 +545,20 @@ function AddUrlForm({ productId, onAdded }: { productId: number; onAdded: () => 
       </div>
     </form>
   )
+}
+
+// ── Helpers ─────────────────────────────────────────────
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
 }
 
 export default App

@@ -1,4 +1,8 @@
-import type { Product, CreateProductInput, ProductUrl, CreateProductUrlInput, ApiResponse } from './types';
+import type {
+  Product, CreateProductInput, ProductUrl, CreateProductUrlInput,
+  ApiResponse, LatestPriceCheck, PriceCheckAggregatedData,
+  PriceCheckUrlResult, UrlData, CronStatus, ProductPriceSummary,
+} from './types';
 
 // ── Products ────────────────────────────────────────────
 
@@ -50,5 +54,57 @@ export async function pauseProductUrl(id: number): Promise<ApiResponse> {
 
 export async function deleteProductUrl(id: number): Promise<ApiResponse> {
   const res = await fetch(`/api/product-urls/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
+// ── Price Checks ────────────────────────────────────────
+
+export async function fetchPriceSummary(productId: number): Promise<ProductPriceSummary> {
+  const res = await fetch(`/api/products/${productId}/price-summary`);
+  return res.json();
+}
+
+export async function fetchLatestPrices(productId: number): Promise<LatestPriceCheck[]> {
+  const res = await fetch(`/api/products/${productId}/latest-prices`);
+  return res.json();
+}
+
+export async function fetchPriceHistory(urlId: number): Promise<LatestPriceCheck[]> {
+  const res = await fetch(`/api/product-urls/${urlId}/price-history`);
+  return res.json();
+}
+
+export async function checkProductPrices(productId: number): Promise<PriceCheckAggregatedData> {
+  const res = await fetch(`/api/products/${productId}/check-prices`, { method: 'POST' });
+  return res.json();
+}
+
+export async function scanProductUrl(urlId: number): Promise<PriceCheckUrlResult> {
+  const res = await fetch(`/api/product-urls/${urlId}/scan`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? 'Scan failed');
+  }
+  return data;
+}
+
+export async function scanArbitraryUrl(url: string): Promise<UrlData> {
+  const res = await fetch('/api/scan-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  return res.json();
+}
+
+// ── Cron ────────────────────────────────────────────────
+
+export async function fetchCronStatus(): Promise<CronStatus> {
+  const res = await fetch('/api/cron/status');
+  return res.json();
+}
+
+export async function triggerCronRun(): Promise<ApiResponse> {
+  const res = await fetch('/api/cron/run', { method: 'POST' });
   return res.json();
 }

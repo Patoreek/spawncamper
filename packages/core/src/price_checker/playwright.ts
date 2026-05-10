@@ -45,12 +45,14 @@ async function attempt(url: string, headless: boolean): Promise<UrlData | null> 
         });
 
         const page = await context.newPage();
-        const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+        const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
 
         // Blocked at network level
         if (!resp || resp.status() >= 400) return null;
 
-        await page.waitForTimeout(3000);
+        // Wait for JS challenges to resolve and content to load
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+        await page.waitForTimeout(2000);
 
         const data = await page.evaluate(extractPageData);
         if (!data) return null;
@@ -78,11 +80,13 @@ function extractPageData() {
         try {
             const json = JSON.parse(script.textContent ?? '');
             const product = findProduct(json);
-            if (!product?.offers) continue;
+            if (!product) continue;
+            const offers = product.offers ?? product.Offers;
+            if (!offers) continue;
 
-            const offer = Array.isArray(product.offers)
-                ? product.offers[0]
-                : product.offers;
+            const offer = Array.isArray(offers)
+                ? offers[0]
+                : offers;
 
             // Direct price
             if (offer?.price || offer?.lowPrice) {
@@ -90,7 +94,7 @@ function extractPageData() {
                     price: String(offer.price ?? offer.lowPrice),
                     currency: offer.priceCurrency ?? 'USD',
                     availability: offer.availability ?? '',
-                    title: product.name ?? null,
+                    title: product.name ?? product.Name ?? null,
                 };
             }
 
@@ -127,6 +131,7 @@ function extractPageData() {
         '.x-price-primary span',
         '#pull-right-price',
         '[data-price]',
+        '.divPriceNormal',
         '.product-price',
         '.current-price',
         '.sale-price',
@@ -178,6 +183,14 @@ function extractPageData() {
         if (text.includes('£')) return 'GBP';
         if (text.includes('€')) return 'EUR';
         if (text.includes('A$') || text.includes('AU$')) return 'AUD';
+        if (text.includes('C$') || text.includes('CA$')) return 'CAD';
+        // Fallback: infer from domain
+        const host = window.location.hostname;
+        if (host.endsWith('.com.au') || host.endsWith('.au')) return 'AUD';
+        if (host.endsWith('.co.uk')) return 'GBP';
+        if (host.endsWith('.ca')) return 'CAD';
+        if (host.endsWith('.de') || host.endsWith('.fr') || host.endsWith('.it') || host.endsWith('.es')) return 'EUR';
+        if (host.endsWith('.co.jp')) return 'JPY';
         return 'USD';
     }
 }

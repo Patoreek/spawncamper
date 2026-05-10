@@ -1,11 +1,13 @@
 import type Database from 'better-sqlite3';
-import type { PriceCheckResult, PriceCheck } from './types';
+import type { PriceCheckResult, PriceCheck, LatestPriceCheck } from './types';
 import type { ApiResponse } from '../db/types';
 
 export class PriceCheckDAL {
 
     private readonly findPreviousPriceStmt: Database.Statement;
     private readonly findAllPreviousPriceStmt: Database.Statement;
+    private readonly findLatestForProductStmt: Database.Statement;
+    private readonly findFirstForProductStmt: Database.Statement;
     private readonly createStmt: Database.Statement;
 
     constructor(db: Database.Database) {
@@ -25,6 +27,27 @@ export class PriceCheckDAL {
             WHERE product_url_id = @id
             ORDER BY created_at DESC
         `);
+        this.findLatestForProductStmt = db.prepare(`
+            SELECT pc.*, pu.url, pu.retailer
+            FROM price_checks pc
+            INNER JOIN product_urls pu ON pc.product_url_id = pu.id
+            WHERE pu.product_id = @productId
+            AND pc.id = (
+              SELECT pc2.id FROM price_checks pc2
+              WHERE pc2.product_url_id = pc.product_url_id
+              ORDER BY pc2.created_at DESC
+              LIMIT 1
+            )
+            ORDER BY pc.price ASC
+        `);
+        this.findFirstForProductStmt = db.prepare(`
+            SELECT pc.price, pc.currency, pc.created_at, pu.retailer
+            FROM price_checks pc
+            INNER JOIN product_urls pu ON pc.product_url_id = pu.id
+            WHERE pu.product_id = @productId
+            ORDER BY pc.created_at ASC
+            LIMIT 1
+        `);
     }
 
     create(input: PriceCheckResult & { product_url_id: number }): PriceCheck {
@@ -42,5 +65,13 @@ export class PriceCheckDAL {
 
       findAllPrevious(productUrlId: number): PriceCheck[] {
         return this.findAllPreviousPriceStmt.all({ id: productUrlId }) as PriceCheck[];
+      }
+
+      findLatestForProduct(productId: number): LatestPriceCheck[] {
+        return this.findLatestForProductStmt.all({ productId }) as LatestPriceCheck[];
+      }
+
+      findFirstForProduct(productId: number): { price: number; currency: string; created_at: string; retailer: string } | null {
+        return (this.findFirstForProductStmt.get({ productId }) as { price: number; currency: string; created_at: string; retailer: string } | undefined) ?? null;
       }
 }

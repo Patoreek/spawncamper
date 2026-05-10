@@ -18,7 +18,7 @@ export async function extractWithCheerio(url: string): Promise<UrlData | null> {
 
         return extractFromJsonLd($)
             ?? extractFromMeta($)
-            ?? extractFromSelectors($);
+            ?? extractFromSelectors($, url);
     } catch {
         return null;
     }
@@ -72,7 +72,7 @@ function extractFromMeta($: cheerio.CheerioAPI): UrlData | null {
     };
 }
 
-function extractFromSelectors($: cheerio.CheerioAPI): UrlData | null {
+function extractFromSelectors($: cheerio.CheerioAPI, url?: string): UrlData | null {
     const priceSelectors = [
         '[data-price]',
         '.price-current',
@@ -101,7 +101,7 @@ function extractFromSelectors($: cheerio.CheerioAPI): UrlData | null {
 
         return {
             price,
-            currency: detectCurrency($, raw),
+            currency: detectCurrency($, raw, url),
             in_stock: true,
             title,
             source: 'selector',
@@ -170,7 +170,7 @@ function extractOffer(product: Record<string, unknown>): Record<string, string> 
     return offer as Record<string, string>;
 }
 
-function detectCurrency($: cheerio.CheerioAPI, priceText: string): string {
+function detectCurrency($: cheerio.CheerioAPI, priceText: string, url?: string): string {
     const metaCurrency = $('meta[itemprop="priceCurrency"]').attr('content');
     if (metaCurrency) return metaCurrency;
 
@@ -180,5 +180,17 @@ function detectCurrency($: cheerio.CheerioAPI, priceText: string): string {
     if (priceText.includes('C$') || priceText.includes('CA$')) return 'CAD';
     if (priceText.includes('¥')) return 'JPY';
     if (priceText.includes('₹')) return 'INR';
+
+    // Fallback: infer from domain
+    if (url) {
+        try {
+            const host = new URL(url).hostname;
+            if (host.endsWith('.com.au') || host.endsWith('.au')) return 'AUD';
+            if (host.endsWith('.co.uk')) return 'GBP';
+            if (host.endsWith('.ca')) return 'CAD';
+            if (host.endsWith('.de') || host.endsWith('.fr') || host.endsWith('.it') || host.endsWith('.es')) return 'EUR';
+            if (host.endsWith('.co.jp')) return 'JPY';
+        } catch {}
+    }
     return 'USD';
 }

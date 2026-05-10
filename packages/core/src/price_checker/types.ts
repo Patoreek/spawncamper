@@ -6,12 +6,32 @@ export interface UrlData {
     source: 'json-ld' | 'meta' | 'selector' | 'playwright' | 'amazon-paapi' | 'proxy';
 }
 
+export interface PriceCheckUrlResult {
+    product_url_id: number;
+    url: string;
+    retailer: string;
+    price: number | null;
+    currency: string;
+    in_stock: boolean;
+    title: string | null;
+    source: UrlData['source'];
+    previous_price: number | null;
+}
+
 export interface PriceCheckAggregatedData {
     productId: number;
-    results: UrlData[];
+    results: PriceCheckUrlResult[];
     lowestPrice: number | null;
     averagePrice: number | null;
     checkedAt: string;
+}
+
+export interface CheckAllResult {
+    startedAt: string;
+    completedAt: string;
+    productsChecked: number;
+    urlsChecked: number;
+    results: PriceCheckAggregatedData[];
 }
 
 // ── Shared helpers ──────────────────────────────────────
@@ -61,6 +81,8 @@ export const PLAYWRIGHT_DOMAINS = [
     'target.com',
     'target.com.au',
     'officeworks.com.au',
+    'scorptec.com.au',
+    'mwave.com.au',
 ];
 
 export function needsProxy(url: string): boolean {

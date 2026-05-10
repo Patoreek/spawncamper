@@ -9,6 +9,10 @@
   "dependencies": {
     "@hono/node-server": "^2.0.1",
     "@spawncamper/core": "workspace:*",
-    "hono": "^4.12.16"
+    "hono": "^4.12.16",
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11"
   }
 }

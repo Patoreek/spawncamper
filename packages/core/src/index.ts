@@ -1,47 +1,24 @@
-// Create a product with URLS of products to watch
-// Pause/Stop product
-// Remove/Archive product
-// Pass in URLS and look up items
-// Search for price
-// Compare price
-// Store results (JSON? DB?)
-// Return results (price, % up/down, website indiviudal prices, etc)
-// send notification to telegram
-// LATER: Purchase bot that has my credientials and can purchase a product?
+// Products
+export {
+  createProduct,
+  getAllProducts,
+  pauseProduct,
+  activateProduct,
+  archiveProduct,
+  deleteProduct,
+} from './products/service';
+export type { Product, CreateProductInput, ProductStatus } from './products/types';
 
-const storeResults = async (): Promise<string[]> => {
-  return [];
-}
+// Product URLs
+export {
+  createProductUrl,
+  getProductUrlById,
+  getProductUrlsForProduct,
+  getAllProductUrls,
+  pauseProductUrl,
+  deleteProductUrl,
+} from './product_urls/service';
+export type { ProductUrl, CreateProductUrl } from './product_urls/types';
 
-const sendNotification = async (): Promise<string[]> => {
-  return [];
-} 
-
-const logAction = async (): Promise<string[]> => {
-  // Structured Log that keeps logs consistent of all actions
-  return [];
-} 
-
-export const checkPrice = async (urls: string[]) => {
-    // TODO
-    const productData: string[] = await getActiveProducts();
-    const newProductData: string[] = [];
-    for (const url of urls) {
-      const data = await getDataFromProductURL(url);
-      newProductData.push(...data);
-    }
-    await comparePrice(productData, newProductData);
-
-    return { urls, price: null as number | null, productData: newProductData };
-};
-
-const getDataFromProductURL = async (_url: string): Promise<string[]> => {
-  return [];
-};
-
-const comparePrice = async (
-  _productData: string[],
-  _newProductData: string[]
-): Promise<string[]> => {
-  return [];
-};
+// Types
+export type { ApiResponse, SuccessResponse, ErrorResponse } from './db/types';

@@ -1,0 +1,14 @@
+{
+  "name": "@spawncamper/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --env-file=../../.env --watch src/index.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.1",
+    "@spawncamper/core": "workspace:*",
+    "hono": "^4.12.16"
+  }
+}

@@ -25,6 +25,18 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/api:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^2.0.1
+        version: 2.0.1(hono@4.12.16)
+      '@spawncamper/core':
+        specifier: workspace:*
+        version: link:../core
+      hono:
+        specifier: ^4.12.16
+        version: 4.12.16
+
   packages/cli:
     dependencies:
       '@spawncamper/core':
@@ -35,7 +47,11 @@ importers:
         specifier: ^25.6.0
         version: 25.6.0
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.9.0
 
   packages/telegram-bot:
     dependencies:
@@ -1070,6 +1086,7 @@ packages:
   prebuild-install@7.1.3:
     resolution: {integrity: sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug==}
     engines: {node: '>=10'}
+    deprecated: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
     hasBin: true
 
   prelude-ls@1.2.1:

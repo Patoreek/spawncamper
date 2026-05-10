@@ -4,4 +4,6 @@ dist
 .env.local
 *.log
 .DS_Store
-packages/core/spawncamper.db
+*.db
+*.db-shm
+*.db-wal

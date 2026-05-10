@@ -1,7 +1,94 @@
-pnpm -r build              # build everything once
-pnpm --filter api dev      # terminal 1
-pnpm --filter web dev      # terminal 2
-pnpm --filter cli dev -- https://example.com   # terminal 3, ad-hoc
+# Spawncamper
 
-### Run migration on packages/core
-`npm run dev`
+Product price tracker. Monitor prices across retailers, get notified when they drop.
+
+## Quick Start
+
+```bash
+pnpm install
+pnpm -r build              # build everything once
+```
+
+Run the API and web frontend (two terminals):
+
+```bash
+pnpm --filter @spawncamper/api dev   # API on :3001
+pnpm --filter web dev                # Web UI on :5173
+```
+
+Other packages:
+
+```bash
+pnpm --filter cli dev -- https://example.com   # ad-hoc CLI price check
+pnpm --filter @spawncamper/core dev             # run core dev script / migration
+```
+
+## Environment Variables
+
+Copy `.env.example` or create `.env` in the project root:
+
+```bash
+# Database (SQLite) — path relative to the running package
+SPAWNCAMPER_DB='../../spawncamper.db'
+
+# Amazon Product Advertising API (PA-API v5)
+AMAZON_ACCESS_KEY=''
+AMAZON_SECRET_KEY=''
+AMAZON_PARTNER_TAG=''
+
+# ScraperAPI — proxy for heavily protected sites
+SCRAPER_API_KEY=''
+```
+
+### Amazon PA-API Setup
+
+The PA-API is used to fetch prices from Amazon product pages. Without it, Amazon URLs will return `null`.
+
+1. Sign up for [Amazon Associates](https://affiliate-program.amazon.com) (free)
+2. Once approved, go to **Tools → Product Advertising API** in the Associates dashboard
+3. Click **Manage Your Credentials** to generate an Access Key and Secret Key
+4. Your Partner Tag is your Associates tracking ID (e.g. `mystore-20`)
+5. Add all three values to `.env`
+
+Supports all Amazon regional domains (`.com`, `.co.uk`, `.com.au`, `.de`, `.co.jp`, etc.).
+
+### ScraperAPI Setup
+
+Used for sites with aggressive bot protection (Big W, eBay, Best Buy, Walmart, Costco). These sites use CDN-level TLS fingerprinting that blocks direct requests and headless browsers.
+
+1. Sign up at [ScraperAPI](https://www.scraperapi.com) (free tier: 5,000 requests/month)
+2. Copy your API key from the dashboard
+3. Add it to `.env` as `SCRAPER_API_KEY`
+
+ScraperAPI handles IP rotation, CAPTCHA solving, and JS rendering — you get back fully rendered HTML.
+
+### Playwright Setup
+
+Playwright is used for JS-rendered sites without aggressive bot detection (Target, Officeworks). Install the browser binary once:
+
+```bash
+cd packages/core && npx playwright install chromium
+```
+
+## Packages
+
+| Package | Description | Port |
+|---------|-------------|------|
+| `packages/core` | Shared domain logic — products, URLs, price checks, scraping | — |
+| `packages/api` | Hono REST API exposing core CRUD operations | 3001 |
+| `packages/web` | React + Vite frontend for managing products & URLs | 5173 |
+| `packages/cli` | CLI for ad-hoc price checks | — |
+| `packages/telegram-bot` | Telegram bot HTTP server | 4000 |
+
+## Price Extraction Strategies
+
+URLs are routed to different extraction strategies based on the domain:
+
+| Domain | Strategy | Requires |
+|--------|----------|----------|
+| `amazon.*` | PA-API v5 | `AMAZON_*` env vars |
+| `bigw`, `ebay`, `bestbuy`, `walmart`, `costco` | Proxy (ScraperAPI) | `SCRAPER_API_KEY` |
+| `target`, `officeworks` | Playwright | Chromium binary |
+| Everything else | Cheerio | Nothing |
+
+**Cheerio** works best with sites that serve JSON-LD structured data (Shopify stores, Apple, Rebel Sport, JB Hi-Fi, Kogan, Nike, ASOS, etc.).

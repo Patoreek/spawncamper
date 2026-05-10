@@ -16,6 +16,8 @@
     "dev-og": "tsc --watch"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0"
+    "better-sqlite3": "^12.9.0",
+    "cheerio": "^1.2.0",
+    "playwright": "^1.59.1"
   }
 }

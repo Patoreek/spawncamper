@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
-import { parsePrice, parseAvailability } from './types';
-import type { UrlData } from './types';
+import { extractFail, extractOk, parsePrice, parseAvailability } from './types';
+import type { ExtractResult, UrlData } from './types';
 
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -8,20 +8,29 @@ const HEADERS = {
     'Accept-Language': 'en-US,en;q=0.9',
 };
 
-export async function extractWithCheerio(url: string): Promise<UrlData | null> {
+export async function extractWithCheerio(url: string): Promise<ExtractResult> {
+    let res: Response;
     try {
-        const res = await fetch(url, { headers: HEADERS });
-        if (!res.ok) return null;
-
-        const html = await res.text();
-        const $ = cheerio.load(html);
-
-        return extractFromJsonLd($)
-            ?? extractFromMeta($)
-            ?? extractFromSelectors($, url);
-    } catch {
-        return null;
+        res = await fetch(url, { headers: HEADERS });
+    } catch (err) {
+        return extractFail('network_error', true, err instanceof Error ? err.message : 'fetch failed');
     }
+    if (!res.ok) {
+        const retryable = res.status >= 500 || res.status === 429;
+        return extractFail('http_error', retryable, `HTTP ${res.status}`);
+    }
+
+    let html: string;
+    try {
+        html = await res.text();
+    } catch (err) {
+        return extractFail('network_error', true, err instanceof Error ? err.message : 'body read failed');
+    }
+
+    const $ = cheerio.load(html);
+    const data = extractFromJsonLd($) ?? extractFromMeta($) ?? extractFromSelectors($, url);
+    if (!data) return extractFail('no_price_found', false, 'no JSON-LD, meta, or selector match');
+    return extractOk(data);
 }
 
 // ── Strategies ──────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { withAffiliateTag } from '../affiliate/service';
 import type { NotifyKind } from '../products/types';
 import type { PriceCheckUrlResult } from '../price_checker/types';
 import type { SummaryData } from './types';
@@ -46,7 +47,11 @@ const renderUrlList = (results: PriceCheckUrlResult[], lowestAud: number | null)
     const isLowest = r.price_aud !== null && r.price_aud === lowestAud;
     const marker = isLowest ? ' (lowest)' : '';
     const stock = r.price === null ? 'no price' : r.in_stock ? 'in stock' : 'out of stock';
-    return `• ${r.retailer}: ${fmtNativeWithAud(r.price, r.currency, r.price_aud)} — ${stock}${marker}`;
+    // Retailer name is wrapped in a Markdown link so Telegram renders it as
+    // a clickable hop straight to the listing. `withAffiliateTag` is a no-op
+    // for non-Amazon hosts or when no partner tag is configured.
+    const retailerLink = `[${r.retailer}](${withAffiliateTag(r.url)})`;
+    return `• ${retailerLink}: ${fmtNativeWithAud(r.price, r.currency, r.price_aud)} — ${stock}${marker}`;
   });
   return lines.join('\n');
 };

@@ -138,6 +138,13 @@ export interface ProductPriceSummary {
   percentageDecrease: number | null;
 }
 
+export interface UrlFailureSummary {
+  product_url_id: number;
+  /** ISO timestamp of most recent failure, or null if the URL has never failed. */
+  last_failure_at: string | null;
+  failures_last_24h: number;
+}
+
 export interface CronStatus {
   schedule: string;
   isRunning: boolean;

@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
-import { parsePrice, parseAvailability } from './types';
-import type { UrlData } from './types';
+import { extractFail, extractOk, parsePrice, parseAvailability } from './types';
+import type { ExtractResult, UrlData } from './types';
 
 /**
  * Fetches a URL through ScraperAPI (renders JS, rotates IPs, bypasses WAFs)
@@ -9,32 +9,35 @@ import type { UrlData } from './types';
  * Requires SCRAPER_API_KEY env var.
  * Sign up: https://www.scraperapi.com (free tier: 5,000 requests/month)
  */
-export async function extractWithProxy(url: string): Promise<UrlData | null> {
+export async function extractWithProxy(url: string): Promise<ExtractResult> {
     const apiKey = process.env.SCRAPER_API_KEY;
     if (!apiKey) {
-        console.warn('[proxy] Missing SCRAPER_API_KEY env var');
-        return null;
+        return extractFail('config_missing', false, 'SCRAPER_API_KEY not set');
     }
 
+    const proxyUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true`;
+    let res: Response;
     try {
-        const proxyUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true`;
-
-        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(30_000) });
-        if (!res.ok) {
-            console.warn(`[proxy] ScraperAPI returned ${res.status} for ${url}`);
-            return null;
-        }
-
-        const html = await res.text();
-        const $ = cheerio.load(html);
-
-        return extractFromJsonLd($)
-            ?? extractFromMeta($)
-            ?? extractFromSelectors($);
+        res = await fetch(proxyUrl, { signal: AbortSignal.timeout(30_000) });
     } catch (err) {
-        console.warn('[proxy] Request failed:', err);
-        return null;
+        return extractFail('network_error', true, err instanceof Error ? err.message : 'fetch failed');
     }
+    if (!res.ok) {
+        const retryable = res.status >= 500 || res.status === 429;
+        return extractFail('http_error', retryable, `ScraperAPI ${res.status}`);
+    }
+
+    let html: string;
+    try {
+        html = await res.text();
+    } catch (err) {
+        return extractFail('network_error', true, err instanceof Error ? err.message : 'body read failed');
+    }
+
+    const $ = cheerio.load(html);
+    const data = extractFromJsonLd($) ?? extractFromMeta($) ?? extractFromSelectors($);
+    if (!data) return extractFail('no_price_found', false, 'no JSON-LD, meta, or selector match');
+    return extractOk(data);
 }
 
 // ── Extraction (same logic as cheerio.ts) ───────────────

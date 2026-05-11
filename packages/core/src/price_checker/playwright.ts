@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
-import { parsePrice, parseAvailability } from './types';
-import type { UrlData } from './types';
+import { extractFail, extractOk, parsePrice, parseAvailability } from './types';
+import type { ExtractResult, UrlData } from './types';
 
 const STEALTH_ARGS = [
     '--disable-blink-features=AutomationControlled',
@@ -8,14 +8,17 @@ const STEALTH_ARGS = [
     '--no-sandbox',
 ];
 
-export async function extractWithPlaywright(url: string): Promise<UrlData | null> {
-    // Try headless first, retry headed if blocked (some CDNs fingerprint headless TLS)
-    const result = await attempt(url, true);
-    if (result) return result;
+export async function extractWithPlaywright(url: string): Promise<ExtractResult> {
+    // Headless first; if blocked at navigation level, retry headed once. The
+    // internal headed retry only kicks in for retryable navigation failures
+    // — non-retryable outcomes (e.g. no_price_found) short-circuit.
+    const headless = await attempt(url, true);
+    if (headless.ok) return headless;
+    if (!headless.retryable) return headless;
     return attempt(url, false);
 }
 
-async function attempt(url: string, headless: boolean): Promise<UrlData | null> {
+async function attempt(url: string, headless: boolean): Promise<ExtractResult> {
     let browser;
     try {
         browser = await chromium.launch({
@@ -24,10 +27,11 @@ async function attempt(url: string, headless: boolean): Promise<UrlData | null> 
             args: STEALTH_ARGS,
         });
     } catch {
-        browser = await chromium.launch({
-            headless,
-            args: STEALTH_ARGS,
-        });
+        try {
+            browser = await chromium.launch({ headless, args: STEALTH_ARGS });
+        } catch (err) {
+            return extractFail('network_error', true, `playwright launch failed: ${err instanceof Error ? err.message : err}`);
+        }
     }
 
     try {
@@ -45,27 +49,41 @@ async function attempt(url: string, headless: boolean): Promise<UrlData | null> 
         });
 
         const page = await context.newPage();
-        const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+        let resp;
+        try {
+            resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+        } catch (err) {
+            return extractFail('network_error', true, err instanceof Error ? err.message : 'page.goto failed');
+        }
 
-        // Blocked at network level
-        if (!resp || resp.status() >= 400) return null;
+        if (!resp) {
+            return extractFail('network_error', true, 'no response from page.goto');
+        }
+        const status = resp.status();
+        if (status >= 400) {
+            const retryable = status >= 500 || status === 429;
+            return extractFail('http_error', retryable, `HTTP ${status}`);
+        }
 
         // Wait for JS challenges to resolve and content to load
         await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
         await page.waitForTimeout(2000);
 
-        const data = await page.evaluate(extractPageData);
-        if (!data) return null;
+        let data;
+        try {
+            data = await page.evaluate(extractPageData);
+        } catch (err) {
+            return extractFail('parse_error', false, err instanceof Error ? err.message : 'page.evaluate failed');
+        }
+        if (!data) return extractFail('no_price_found', false, 'no JSON-LD or selector match in DOM');
 
-        return {
+        return extractOk({
             price: parsePrice(data.price),
             currency: data.currency,
             in_stock: parseAvailability(data.availability),
             title: (data.title as string) ?? null,
             source: 'playwright',
-        };
-    } catch {
-        return null;
+        });
     } finally {
         await browser.close();
     }

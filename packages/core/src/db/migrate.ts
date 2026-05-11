@@ -79,6 +79,17 @@ import type Database from 'better-sqlite3';
 
     CREATE INDEX IF NOT EXISTS idx_cron_runs_started_at
       ON cron_runs(started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS price_check_failures (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_url_id  INTEGER NOT NULL REFERENCES product_urls(id) ON DELETE CASCADE,
+      reason          TEXT    NOT NULL,
+      message         TEXT,
+      created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_price_check_failures_url_time
+      ON price_check_failures(product_url_id, created_at DESC);
   `;
 
   // Idempotent column additions for pre-existing databases.

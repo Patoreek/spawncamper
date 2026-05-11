@@ -27,6 +27,9 @@ import {
   runPriceCheck,
   sweepStaleRunning,
   getCronStatus,
+  getRecentFailuresForUrl,
+  getFailureSummaryForUrl,
+  getFailureSummariesForProduct,
 } from '@spawncamper/core';
 
 const app = new Hono();
@@ -168,6 +171,26 @@ app.get('/api/product-urls/:id/price-history', (c) => {
   return c.json(getAllPreviousPriceChecks(id));
 });
 
+// Recent scrape failures for a URL (newest first)
+app.get('/api/product-urls/:id/failures', (c) => {
+  const id = Number(c.req.param('id'));
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 20), 1), 200);
+  return c.json(getRecentFailuresForUrl(id, limit));
+});
+
+// Quick failure summary for a URL — last_failure_at + 24h count
+app.get('/api/product-urls/:id/failure-summary', (c) => {
+  const id = Number(c.req.param('id'));
+  return c.json(getFailureSummaryForUrl(id));
+});
+
+// Failure summaries for all URLs of a product (one row per URL, no-failure
+// URLs included with null/0). One call powers the URL list badges in the UI.
+app.get('/api/products/:id/url-failure-summaries', (c) => {
+  const productId = Number(c.req.param('id'));
+  return c.json(getFailureSummariesForProduct(productId));
+});
+
 // Check prices for a single product (synchronous — waits for result)
 app.post('/api/products/:id/check-prices', async (c) => {
   const productId = Number(c.req.param('id'));
@@ -195,7 +218,8 @@ app.post('/api/product-urls/:id/scan', async (c) => {
   }
 });
 
-// Scan an arbitrary URL (not saved in DB)
+// Scan an arbitrary URL (not saved in DB). Single attempt — manual scans
+// fail fast rather than waiting on retries against a known-broken URL.
 app.post('/api/scan-url', async (c) => {
   const body = await c.req.json();
   const url = body.url;
@@ -203,10 +227,21 @@ app.post('/api/scan-url', async (c) => {
     return c.json({ success: false, error: { code: 'BAD_REQUEST', message: 'url is required' } }, 400);
   }
   const result = await getDataFromUrl(url);
-  if (!result) {
-    return c.json({ success: false, error: { code: 'SCAN_FAILED', message: 'Could not extract price data from URL' } }, 422);
+  if (!result.ok) {
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: 'SCAN_FAILED',
+          message: result.message ?? 'Could not extract price data from URL',
+          reason: result.reason,
+          retryable: result.retryable,
+        },
+      },
+      422,
+    );
   }
-  return c.json(result);
+  return c.json(result.data);
 });
 
 // ── Cron Control ────────────────────────────────────────

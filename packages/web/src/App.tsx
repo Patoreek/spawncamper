@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind, PriceHistoryPoint } from './types'
+import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind, PriceHistoryPoint, UrlFailureSummary } from './types'
 import * as api from './api'
 import { PriceHistoryChart } from './PriceHistoryChart'
 import './App.css'
@@ -30,6 +30,7 @@ function App() {
   const [latestPrices, setLatestPrices] = useState<Record<number, LatestPriceCheck[]>>({})
   const [summaries, setSummaries] = useState<Record<number, ProductPriceSummary>>({})
   const [historyByProduct, setHistoryByProduct] = useState<Record<number, PriceHistoryPoint[]>>({})
+  const [failureSummariesByProduct, setFailureSummariesByProduct] = useState<Record<number, UrlFailureSummary[]>>({})
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [checkingProduct, setCheckingProduct] = useState<number | null>(null)
   const [scanningUrl, setScanningUrl] = useState<number | null>(null)
@@ -55,14 +56,16 @@ function App() {
       return
     }
     setExpandedProduct(productId)
-    const [urls, prices, history] = await Promise.all([
+    const [urls, prices, history, failures] = await Promise.all([
       api.fetchProductUrls(productId),
       api.fetchLatestPrices(productId),
       api.fetchProductPriceHistory(productId),
+      api.fetchUrlFailureSummaries(productId),
     ])
     setUrlsByProduct((prev) => ({ ...prev, [productId]: urls }))
     setLatestPrices((prev) => ({ ...prev, [productId]: prices }))
     setHistoryByProduct((prev) => ({ ...prev, [productId]: history }))
+    setFailureSummariesByProduct((prev) => ({ ...prev, [productId]: failures }))
   }
 
   const handleStatusChange = async (id: number, action: 'pause' | 'activate' | 'archive') => {
@@ -92,14 +95,16 @@ function App() {
   }
 
   const refreshSummary = async (productId: number) => {
-    const [prices, summary, history] = await Promise.all([
+    const [prices, summary, history, failures] = await Promise.all([
       api.fetchLatestPrices(productId),
       api.fetchPriceSummary(productId),
       api.fetchProductPriceHistory(productId),
+      api.fetchUrlFailureSummaries(productId),
     ])
     setLatestPrices((prev) => ({ ...prev, [productId]: prices }))
     setSummaries((prev) => ({ ...prev, [productId]: summary }))
     setHistoryByProduct((prev) => ({ ...prev, [productId]: history }))
+    setFailureSummariesByProduct((prev) => ({ ...prev, [productId]: failures }))
   }
 
   const handleCheckPrices = async (productId: number) => {
@@ -154,6 +159,10 @@ function App() {
 
   const getPriceForUrl = (productId: number, urlId: number): LatestPriceCheck | undefined => {
     return latestPrices[productId]?.find((p) => p.product_url_id === urlId)
+  }
+
+  const getFailureForUrl = (productId: number, urlId: number): UrlFailureSummary | undefined => {
+    return failureSummariesByProduct[productId]?.find((s) => s.product_url_id === urlId)
   }
 
   return (
@@ -288,6 +297,7 @@ function App() {
                         onScan={handleScanUrl}
                         scanningUrl={scanningUrl}
                         getPriceForUrl={(urlId) => getPriceForUrl(product.id, urlId)}
+                        getFailureForUrl={(urlId) => getFailureForUrl(product.id, urlId)}
                       />
                       <AddUrlForm productId={product.id} onAdded={() => handleUrlAdded(product.id)} />
                     </div>
@@ -521,6 +531,7 @@ function UrlList({
   onScan,
   scanningUrl,
   getPriceForUrl,
+  getFailureForUrl,
 }: {
   urls: ProductUrl[]
   productId: number
@@ -529,6 +540,7 @@ function UrlList({
   onScan: (productId: number, urlId: number) => void
   scanningUrl: number | null
   getPriceForUrl: (urlId: number) => LatestPriceCheck | undefined
+  getFailureForUrl: (urlId: number) => UrlFailureSummary | undefined
 }) {
   if (urls.length === 0) return <p className="empty-urls">No URLs added yet.</p>
 
@@ -536,11 +548,23 @@ function UrlList({
     <ul className="url-list">
       {urls.map((u) => {
         const priceData = getPriceForUrl(u.id)
+        const failure = getFailureForUrl(u.id)
         return (
           <li key={u.id} className={u.active ? '' : 'url-inactive'}>
             <div className="url-info">
               <div className="url-top-row">
-                <span className="url-retailer">{u.retailer}</span>
+                <span className="url-retailer">
+                  {u.retailer}
+                  {failure && failure.failures_last_24h > 0 && (
+                    <span
+                      className="failure-badge"
+                      title={`${failure.failures_last_24h} scrape failure${failure.failures_last_24h === 1 ? '' : 's'} in last 24h` +
+                        (failure.last_failure_at ? ` (latest: ${formatDate(failure.last_failure_at)})` : '')}
+                    >
+                      ⚠
+                    </span>
+                  )}
+                </span>
                 {priceData && (
                   <span className="url-price">
                     {formatPriceNative(priceData.price, priceData.currency)}

@@ -1,5 +1,6 @@
 import { createHmac, createHash } from 'crypto';
-import type { UrlData } from './types';
+import { extractFail, extractOk } from './types';
+import type { ExtractResult, UrlData } from './types';
 
 // ── Config ──────────────────────────────────────────────
 
@@ -65,53 +66,51 @@ export function isAmazonUrl(url: string): boolean {
     }
 }
 
-export async function extractWithAmazon(url: string): Promise<UrlData | null> {
+export async function extractWithAmazon(url: string): Promise<ExtractResult> {
     const config = getConfig();
     if (!config) {
-        console.warn('[amazon] Missing AMAZON_ACCESS_KEY, AMAZON_SECRET_KEY, or AMAZON_PARTNER_TAG env vars');
-        return null;
+        return extractFail('config_missing', false, 'AMAZON_ACCESS_KEY / SECRET / PARTNER_TAG not all set');
     }
 
     const asin = extractAsin(url);
     if (!asin) {
-        console.warn('[amazon] Could not extract ASIN from URL:', url);
-        return null;
+        return extractFail('parse_error', false, `could not extract ASIN from ${url}`);
     }
 
     const domainKey = getDomainKey(url);
     const endpoint = REGION_MAP[domainKey];
     if (!endpoint) {
-        console.warn('[amazon] Unsupported Amazon domain:', domainKey);
-        return null;
+        return extractFail('parse_error', false, `unsupported Amazon domain ${domainKey}`);
     }
 
+    const body = JSON.stringify({
+        ItemIds: [asin],
+        Resources: [
+            'ItemInfo.Title',
+            'Offers.Listings.Price',
+            'Offers.Listings.Availability.Type',
+            'Offers.Listings.Availability.Message',
+            'Offers.Listings.DeliveryInfo.IsAmazonFulfilled',
+        ],
+        PartnerTag: config.partnerTag,
+        PartnerType: 'Associates',
+        Marketplace: `www.${domainKey}`,
+    });
+
+    const path = '/paapi5/getitems';
+    const headers = sign({
+        method: 'POST',
+        host: endpoint.host,
+        path,
+        region: endpoint.region,
+        body,
+        accessKey: config.accessKey,
+        secretKey: config.secretKey,
+    });
+
+    let res: Response;
     try {
-        const body = JSON.stringify({
-            ItemIds: [asin],
-            Resources: [
-                'ItemInfo.Title',
-                'Offers.Listings.Price',
-                'Offers.Listings.Availability.Type',
-                'Offers.Listings.Availability.Message',
-                'Offers.Listings.DeliveryInfo.IsAmazonFulfilled',
-            ],
-            PartnerTag: config.partnerTag,
-            PartnerType: 'Associates',
-            Marketplace: `www.${domainKey}`,
-        });
-
-        const path = '/paapi5/getitems';
-        const headers = sign({
-            method: 'POST',
-            host: endpoint.host,
-            path,
-            region: endpoint.region,
-            body,
-            accessKey: config.accessKey,
-            secretKey: config.secretKey,
-        });
-
-        const res = await fetch(`https://${endpoint.host}${path}`, {
+        res = await fetch(`https://${endpoint.host}${path}`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -121,19 +120,34 @@ export async function extractWithAmazon(url: string): Promise<UrlData | null> {
             },
             body,
         });
-
-        if (!res.ok) {
-            const err = await res.text();
-            console.warn(`[amazon] PA-API error ${res.status}:`, err.slice(0, 200));
-            return null;
-        }
-
-        const data = await res.json() as PaapiResponse;
-        return parseResponse(data, domainKey);
     } catch (err) {
-        console.warn('[amazon] Request failed:', err);
-        return null;
+        return extractFail('network_error', true, err instanceof Error ? err.message : 'fetch failed');
     }
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        // PA-API uses 429 for throttling and 5xx for transient errors.
+        const retryable = res.status >= 500 || res.status === 429;
+        return extractFail('http_error', retryable, `PA-API ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    let data: PaapiResponse;
+    try {
+        data = (await res.json()) as PaapiResponse;
+    } catch (err) {
+        return extractFail('parse_error', false, err instanceof Error ? err.message : 'json parse failed');
+    }
+
+    const item = data.ItemsResult?.Items?.[0];
+    if (!item) {
+        return extractFail('item_unavailable', false, `no item returned for ASIN ${asin}`);
+    }
+
+    const parsed = parseResponse(data, domainKey);
+    if (!parsed) {
+        return extractFail('no_price_found', false, `PA-API returned item but no price/listing`);
+    }
+    return extractOk(parsed);
 }
 
 // ── URL parsing ─────────────────────────────────────────

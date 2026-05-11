@@ -2,7 +2,7 @@ import type {
   Product, CreateProductInput, ProductUrl, CreateProductUrlInput,
   ApiResponse, LatestPriceCheck, PriceCheckAggregatedData,
   PriceCheckUrlResult, UrlData, CronStatus, ProductPriceSummary,
-  NotifyRuleInput, PriceHistoryPoint,
+  NotifyRuleInput, PriceHistoryPoint, UrlFailureSummary,
 } from './types';
 
 // ── Products ────────────────────────────────────────────
@@ -95,6 +95,11 @@ export async function fetchPriceHistory(urlId: number): Promise<LatestPriceCheck
 
 export async function fetchProductPriceHistory(productId: number): Promise<PriceHistoryPoint[]> {
   const res = await fetch(`/api/products/${productId}/price-history`);
+  return res.json();
+}
+
+export async function fetchUrlFailureSummaries(productId: number): Promise<UrlFailureSummary[]> {
+  const res = await fetch(`/api/products/${productId}/url-failure-summaries`);
   return res.json();
 }
 

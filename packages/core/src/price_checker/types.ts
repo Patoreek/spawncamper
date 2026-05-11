@@ -6,6 +6,42 @@ export interface UrlData {
     source: 'json-ld' | 'meta' | 'selector' | 'playwright' | 'amazon-paapi' | 'proxy';
 }
 
+/**
+ * Reason an extraction attempt failed. String union with an escape hatch so
+ * adapters can emit ad-hoc codes that still typecheck for downstream
+ * consumers (which are expected to treat unknown reasons gracefully).
+ *
+ * Retryability mapping (defaults — adapters may override per call):
+ *   network_error      retryable    (transient DNS / TCP / TLS / abort)
+ *   http_error         see retryable on the result; 5xx & 429 retryable, 4xx not
+ *   no_price_found     non-retryable (selectors broken; page loaded fine)
+ *   config_missing     non-retryable (env vars not set)
+ *   item_unavailable   non-retryable (PA-API: item not in catalog)
+ *   parse_error        non-retryable (unexpected response shape)
+ *   extraction_failed  non-retryable (catch-all; should be rare after refactor)
+ */
+export type FailureReason =
+    | 'network_error'
+    | 'http_error'
+    | 'no_price_found'
+    | 'config_missing'
+    | 'item_unavailable'
+    | 'parse_error'
+    | 'extraction_failed'
+    | (string & {});
+
+export type ExtractResult =
+    | { ok: true; data: UrlData }
+    | { ok: false; reason: FailureReason; message?: string; retryable: boolean };
+
+/** Convenience constructors so adapters don't have to spell the discriminator. */
+export const extractOk = (data: UrlData): ExtractResult => ({ ok: true, data });
+export const extractFail = (
+    reason: FailureReason,
+    retryable: boolean,
+    message?: string,
+): ExtractResult => ({ ok: false, reason, retryable, message });
+
 export interface PriceCheckUrlResult {
     product_url_id: number;
     url: string;

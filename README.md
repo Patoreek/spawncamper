@@ -57,6 +57,8 @@ The PA-API is used to fetch prices from Amazon product pages. Without it, Amazon
 
 Supports all Amazon regional domains (`.com`, `.co.uk`, `.com.au`, `.de`, `.co.jp`, etc.).
 
+The `AMAZON_PARTNER_TAG` value is also appended as a `?tag=` parameter to any Amazon URL surfaced in outbound Telegram notifications. Non-Amazon URLs and links displayed in the web UI are left untouched.
+
 ### ScraperAPI Setup
 
 Used for sites with aggressive bot protection (Big W, eBay, Best Buy, Walmart, Costco). These sites use CDN-level TLS fingerprinting that blocks direct requests and headless browsers.

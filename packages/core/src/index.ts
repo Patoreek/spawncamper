@@ -40,6 +40,8 @@ export type {
   PriceCheckAggregatedData,
   PriceCheckUrlResult,
   CheckAllResult,
+  ExtractResult,
+  FailureReason,
 } from './price_checker/types';
 
 // Price Checks (DB queries)
@@ -74,6 +76,22 @@ export type {
 
 // FX (currency conversion to AUD)
 export { ensureRate, convertToAudOrNull } from './fx/service';
+
+// Affiliate link rewriting (Amazon partner tag)
+export { withAffiliateTag } from './affiliate/service';
+
+// Scrape failure logging
+export {
+  recordScrapeFailure,
+  getRecentFailuresForUrl,
+  getFailureSummaryForUrl,
+  getFailureSummariesForProduct,
+} from './price_check_failures/service';
+export type {
+  ScrapeFailure,
+  ScrapeFailureReason,
+  UrlFailureSummary,
+} from './price_check_failures/types';
 
 // Cron / scheduled-run tracking
 export { runPriceCheck, sweepStaleRunning, getCronStatus } from './cron/service';

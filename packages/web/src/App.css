@@ -455,6 +455,20 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.failure-badge {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  cursor: help;
 }
 
 .url-price {

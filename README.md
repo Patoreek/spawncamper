@@ -19,7 +19,6 @@ pnpm --filter web dev                # Web UI on :5173
 Other packages:
 
 ```bash
-pnpm --filter cli dev -- https://example.com   # ad-hoc CLI price check
 pnpm --filter @spawncamper/core dev             # run core dev script / migration
 ```
 
@@ -38,6 +37,10 @@ AMAZON_PARTNER_TAG=''
 
 # ScraperAPI — proxy for heavily protected sites
 SCRAPER_API_KEY=''
+
+# Telegram notifications (both required to send messages)
+TELEGRAM_BOT_TOKEN=''
+TELEGRAM_CHAT_ID=''
 ```
 
 ### Amazon PA-API Setup
@@ -62,6 +65,13 @@ Used for sites with aggressive bot protection (Big W, eBay, Best Buy, Walmart, C
 
 ScraperAPI handles IP rotation, CAPTCHA solving, and JS rendering — you get back fully rendered HTML.
 
+### Telegram Setup
+
+Used to deliver price-drop and recovery notifications. If either variable is unset, sends are skipped with a console warning.
+
+1. Message [@BotFather](https://t.me/BotFather) on Telegram and run `/newbot` to create a bot — copy the token it gives you into `TELEGRAM_BOT_TOKEN`.
+2. DM your new bot once (so it can message you back), then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy the `chat.id` from the response into `TELEGRAM_CHAT_ID`.
+
 ### Playwright Setup
 
 Playwright is used for JS-rendered sites without aggressive bot detection (Target, Officeworks). Install the browser binary once:
@@ -77,8 +87,7 @@ cd packages/core && npx playwright install chromium
 | `packages/core` | Shared domain logic — products, URLs, price checks, scraping | — |
 | `packages/api` | Hono REST API exposing core CRUD operations | 3001 |
 | `packages/web` | React + Vite frontend for managing products & URLs | 5173 |
-| `packages/cli` | CLI for ad-hoc price checks | — |
-| `packages/telegram-bot` | Telegram bot HTTP server | 4000 |
+| `packages/messenger` | Generic messenger abstraction with Telegram + mock adapters | — |
 
 ## Price Extraction Strategies
 

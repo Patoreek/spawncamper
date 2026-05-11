@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { convertToAudOrNull } from '../fx/service';
 import { getProductById } from '../products/service';
 import { getLatestPriceChecksForProduct, getProductPriceSummary } from '../price_checks/service';
 import { NotificationDAL } from './dal';
@@ -50,7 +51,7 @@ const send = async (text: string): Promise<{ sent: boolean; skippedReason?: stri
 
 const previousLowestFor = (aggregated: PriceCheckAggregatedData): number | null => {
   const prevPrices = aggregated.results
-    .map((r) => r.previous_price)
+    .map((r) => r.previous_price_aud)
     .filter((p): p is number => p !== null && p !== undefined);
   return prevPrices.length ? Math.min(...prevPrices) : null;
 };
@@ -131,18 +132,20 @@ export const sendTestMessage = async (productId: number): Promise<NotifyResult> 
     retailer: p.retailer,
     price: p.price,
     currency: p.currency,
+    price_aud: convertToAudOrNull(p.price, p.currency),
     in_stock: !!p.in_stock,
     title: null,
     source: 'selector',
     previous_price: null,
+    previous_price_aud: null,
   }));
-  const prices = results.map((r) => r.price).filter((p): p is number => p !== null);
+  const audPrices = results.map((r) => r.price_aud).filter((p): p is number => p !== null);
 
   const aggregated: PriceCheckAggregatedData = {
     productId,
     results,
-    lowestPrice: prices.length ? Math.min(...prices) : null,
-    averagePrice: prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null,
+    lowestPrice: audPrices.length ? Math.min(...audPrices) : null,
+    averagePrice: audPrices.length ? audPrices.reduce((a, b) => a + b, 0) / audPrices.length : null,
     checkedAt: latest[0]?.created_at ?? new Date().toISOString(),
   };
 

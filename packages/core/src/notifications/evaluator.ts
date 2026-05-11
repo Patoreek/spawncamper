@@ -1,5 +1,10 @@
 import type { EvaluateContext, NotificationRecord, NotifyDecision, RuleEvaluation } from './types';
 
+/**
+ * Rule values are interpreted as AUD. `currentLowest`, `initialPrice` and
+ * `previousLowest` in the context are already AUD-converted by the caller, so
+ * comparisons here are all in the same denomination.
+ */
 export const evaluateRule = (ctx: EvaluateContext): RuleEvaluation => {
   const { rule, currentLowest, initialPrice, previousLowest } = ctx;
 

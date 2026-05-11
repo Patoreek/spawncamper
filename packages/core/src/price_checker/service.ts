@@ -2,6 +2,7 @@ import { getProductUrlsForProduct, getProductUrlById } from '../product_urls/ser
 import { getAllProducts } from '../products/service';
 import { createPriceCheck, getPreviousPriceCheck } from '../price_checks/service';
 import { evaluateAndNotify } from '../notifications/service';
+import { convertToAudOrNull, ensureRate } from '../fx/service';
 import { extractWithCheerio } from './cheerio';
 import { extractWithPlaywright } from './playwright';
 import { extractWithProxy } from './proxy';
@@ -31,11 +32,20 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
 
         if (!urlData) continue;
 
+        // Make sure we have an AUD rate cached for this currency before we
+        // persist anything — guarantees the read path can convert later.
+        if (urlData.price !== null) {
+            try { await ensureRate(urlData.currency); }
+            catch (err) { console.warn(`[price_checker] ensureRate(${urlData.currency}) failed:`, err); }
+        }
+
         // Persist to price_checks if we got a valid price
         let previousPrice: number | null = null;
+        let previousCurrency: string | null = null;
         if (urlData.price !== null) {
             const previous = getPreviousPriceCheck(productUrl.id);
             previousPrice = previous?.price ?? null;
+            previousCurrency = previous?.currency ?? null;
 
             createPriceCheck({
                 product_url_id: productUrl.id,
@@ -51,20 +61,22 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
             retailer: productUrl.retailer,
             price: urlData.price,
             currency: urlData.currency,
+            price_aud: convertToAudOrNull(urlData.price, urlData.currency),
             in_stock: urlData.in_stock,
             title: urlData.title,
             source: urlData.source,
             previous_price: previousPrice,
+            previous_price_aud: convertToAudOrNull(previousPrice, previousCurrency),
         });
     }
 
-    const prices = results.map((r) => r.price).filter((p): p is number => p !== null);
+    const audPrices = results.map((r) => r.price_aud).filter((p): p is number => p !== null);
 
     const aggregated: PriceCheckAggregatedData = {
         productId,
         results,
-        lowestPrice: prices.length ? Math.min(...prices) : null,
-        averagePrice: prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null,
+        lowestPrice: audPrices.length ? Math.min(...audPrices) : null,
+        averagePrice: audPrices.length ? audPrices.reduce((a, b) => a + b, 0) / audPrices.length : null,
         checkedAt: new Date().toISOString(),
     };
 
@@ -85,10 +97,17 @@ export const checkSingleUrl = async (productUrlId: number): Promise<PriceCheckUr
     const urlData = await getDataFromUrl(productUrl.url);
     if (!urlData) return null;
 
+    if (urlData.price !== null) {
+        try { await ensureRate(urlData.currency); }
+        catch (err) { console.warn(`[price_checker] ensureRate(${urlData.currency}) failed:`, err); }
+    }
+
     let previousPrice: number | null = null;
+    let previousCurrency: string | null = null;
     if (urlData.price !== null) {
         const previous = getPreviousPriceCheck(productUrl.id);
         previousPrice = previous?.price ?? null;
+        previousCurrency = previous?.currency ?? null;
 
         createPriceCheck({
             product_url_id: productUrl.id,
@@ -104,10 +123,12 @@ export const checkSingleUrl = async (productUrlId: number): Promise<PriceCheckUr
         retailer: productUrl.retailer,
         price: urlData.price,
         currency: urlData.currency,
+        price_aud: convertToAudOrNull(urlData.price, urlData.currency),
         in_stock: urlData.in_stock,
         title: urlData.title,
         source: urlData.source,
         previous_price: previousPrice,
+        previous_price_aud: convertToAudOrNull(previousPrice, previousCurrency),
     };
 };
 

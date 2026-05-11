@@ -4,8 +4,25 @@ import type { SummaryData } from './types';
 
 const fmtPrice = (price: number | null, currency: string | null = null): string => {
   if (price === null) return '—';
-  const symbol = !currency || currency === 'AUD' || currency === 'USD' ? '$' : `${currency} `;
-  return `${symbol}${price.toFixed(2)}`;
+  const c = (currency ?? 'AUD').toUpperCase();
+  if (c === 'AUD') return `A$${price.toFixed(2)}`;
+  if (c === 'USD') return `US$${price.toFixed(2)}`;
+  if (c === 'GBP') return `£${price.toFixed(2)}`;
+  if (c === 'EUR') return `€${price.toFixed(2)}`;
+  return `${c} ${price.toFixed(2)}`;
+};
+
+/** Format a per-URL price showing native + AUD-equivalent when applicable. */
+const fmtNativeWithAud = (
+  price: number | null,
+  currency: string | null,
+  priceAud: number | null,
+): string => {
+  if (price === null) return '—';
+  const native = fmtPrice(price, currency);
+  const isAud = (currency ?? 'AUD').toUpperCase() === 'AUD';
+  if (isAud || priceAud === null) return native;
+  return `${native} (≈ ${fmtPrice(priceAud, 'AUD')})`;
 };
 
 const describeRule = (
@@ -21,13 +38,13 @@ const describeRule = (
   }
 };
 
-const renderUrlList = (results: PriceCheckUrlResult[], lowestPrice: number | null): string => {
+const renderUrlList = (results: PriceCheckUrlResult[], lowestAud: number | null): string => {
   if (results.length === 0) return '';
   const lines = results.map((r) => {
-    const isLowest = r.price !== null && r.price === lowestPrice;
+    const isLowest = r.price_aud !== null && r.price_aud === lowestAud;
     const marker = isLowest ? ' (lowest)' : '';
     const stock = r.price === null ? 'no price' : r.in_stock ? 'in stock' : 'out of stock';
-    return `• ${r.retailer}: ${fmtPrice(r.price, r.currency)} — ${stock}${marker}`;
+    return `• ${r.retailer}: ${fmtNativeWithAud(r.price, r.currency, r.price_aud)} — ${stock}${marker}`;
   });
   return lines.join('\n');
 };
@@ -38,7 +55,7 @@ export const formatAlertMessage = (
   previousLowest: number | null,
 ): string => {
   const { productName, rule, aggregated, initialPrice, percentageDecrease } = data;
-  const lowestResult = aggregated.results.find((r) => r.price === aggregated.lowestPrice);
+  const lowestResult = aggregated.results.find((r) => r.price_aud === aggregated.lowestPrice);
   const retailer = lowestResult?.retailer ?? 'unknown retailer';
 
   const lines: string[] = [];
@@ -73,7 +90,7 @@ export const formatRecoveryMessage = (
   currentPrice: number,
 ): string => {
   const { productName, rule, aggregated } = data;
-  const lowestResult = aggregated.results.find((r) => r.price === aggregated.lowestPrice);
+  const lowestResult = aggregated.results.find((r) => r.price_aud === aggregated.lowestPrice);
   const retailer = lowestResult?.retailer ?? 'unknown retailer';
 
   const lines: string[] = [];
@@ -98,7 +115,7 @@ export const formatRecoveryMessage = (
 
 export const formatTestMessage = (data: SummaryData): string => {
   const { productName, rule, aggregated, initialPrice, initialRetailer, percentageDecrease } = data;
-  const lowestResult = aggregated.results.find((r) => r.price === aggregated.lowestPrice);
+  const lowestResult = aggregated.results.find((r) => r.price_aud === aggregated.lowestPrice);
 
   const lines: string[] = [];
   lines.push(`*Test message:* ${productName}`);

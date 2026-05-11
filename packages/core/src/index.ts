@@ -65,5 +65,8 @@ export type {
   NotificationRecord,
 } from './notifications/types';
 
+// FX (currency conversion to AUD)
+export { ensureRate, convertToAudOrNull } from './fx/service';
+
 // Types
 export type { ApiResponse, SuccessResponse, ErrorResponse } from './db/types';

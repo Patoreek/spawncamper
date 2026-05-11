@@ -429,7 +429,7 @@ function UrlScanner() {
           <div className="scan-result-row">
             <span className="scan-label">Price</span>
             <span className="scan-price">
-              {result.price !== null ? `${result.currency === 'USD' ? '$' : result.currency + ' '}${result.price.toFixed(2)}` : 'Not found'}
+              {result.price !== null ? formatPriceNative(result.price, result.currency) : 'Not found'}
             </span>
           </div>
           {result.title && (
@@ -528,7 +528,7 @@ function UrlList({
                 <span className="url-retailer">{u.retailer}</span>
                 {priceData && (
                   <span className="url-price">
-                    ${priceData.price.toFixed(2)}
+                    {formatPriceNative(priceData.price, priceData.currency)}
                     <span className={`stock-indicator ${priceData.in_stock ? 'in-stock' : 'out-of-stock'}`}>
                       {priceData.in_stock ? 'In Stock' : 'Out of Stock'}
                     </span>
@@ -706,6 +706,15 @@ function NotifyRuleEditor({
 }
 
 // ── Helpers ─────────────────────────────────────────────
+
+function formatPriceNative(price: number, currency: string): string {
+  const c = (currency ?? 'AUD').toUpperCase()
+  if (c === 'AUD') return `$${price.toFixed(2)}`
+  if (c === 'USD') return `US$${price.toFixed(2)}`
+  if (c === 'GBP') return `£${price.toFixed(2)}`
+  if (c === 'EUR') return `€${price.toFixed(2)}`
+  return `${c} ${price.toFixed(2)}`
+}
 
 function formatDate(iso: string): string {
   const d = new Date(iso)

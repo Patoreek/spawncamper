@@ -54,6 +54,12 @@ import type Database from 'better-sqlite3';
 
     CREATE INDEX IF NOT EXISTS idx_notifications_dedupe
       ON notifications(product_id, kind, sent_at DESC);
+
+    CREATE TABLE IF NOT EXISTS fx_rates (
+      currency   TEXT PRIMARY KEY,
+      rate       REAL NOT NULL,
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `;
 
   // Idempotent column additions for pre-existing databases.

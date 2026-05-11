@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { convertToAudOrNull } from '../fx/service';
 import { PriceCheckDAL } from './dal';
 import type { PriceCheck, PriceCheckResult, LatestPriceCheck, ProductPriceSummary } from './types';
 
@@ -20,25 +21,41 @@ export const getLatestPriceChecksForProduct = (productId: number): LatestPriceCh
   return priceCheckDAL.findLatestForProduct(productId);
 };
 
+/**
+ * Returns the product's initial and current-lowest price normalised to AUD.
+ * Rows whose currency can't be converted (no cached FX rate) are excluded
+ * from the lowest-price calculation rather than silently treated as AUD.
+ */
 export const getProductPriceSummary = (productId: number): ProductPriceSummary => {
   const first = priceCheckDAL.findFirstForProduct(productId);
   const latest = priceCheckDAL.findLatestForProduct(productId);
 
-  const currentLowest = latest.length > 0
-    ? latest.reduce((min, pc) => pc.price < min.price ? pc : min, latest[0])
-    : null;
+  const initialPriceAud = first ? convertToAudOrNull(first.price, first.currency) : null;
+
+  // Pick the row with the lowest AUD-converted price. Rows without a usable
+  // rate are dropped (fail-closed).
+  let currentLowest: LatestPriceCheck | null = null;
+  let currentLowestAud: number | null = null;
+  for (const pc of latest) {
+    const aud = convertToAudOrNull(pc.price, pc.currency);
+    if (aud === null) continue;
+    if (currentLowestAud === null || aud < currentLowestAud) {
+      currentLowestAud = aud;
+      currentLowest = pc;
+    }
+  }
 
   let percentageDecrease: number | null = null;
-  if (first && currentLowest && first.price > 0) {
-    percentageDecrease = Math.round(((first.price - currentLowest.price) / first.price) * 10000) / 100;
+  if (initialPriceAud !== null && currentLowestAud !== null && initialPriceAud > 0) {
+    percentageDecrease = Math.round(((initialPriceAud - currentLowestAud) / initialPriceAud) * 10000) / 100;
   }
 
   return {
-    initialPrice: first?.price ?? null,
+    initialPrice: initialPriceAud,
     initialRetailer: first?.retailer ?? null,
     initialDate: first?.created_at ?? null,
     initialCurrency: first?.currency ?? null,
-    currentLowest: currentLowest?.price ?? null,
+    currentLowest: currentLowestAud,
     currentLowestRetailer: currentLowest?.retailer ?? null,
     currentLowestCurrency: currentLowest?.currency ?? null,
     percentageDecrease,

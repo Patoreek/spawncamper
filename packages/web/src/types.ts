@@ -70,18 +70,27 @@ export interface PriceCheckUrlResult {
   product_url_id: number;
   url: string;
   retailer: string;
+  /** Native price as extracted from the retailer. */
   price: number | null;
+  /** ISO 4217 code of the native price. */
   currency: string;
+  /** Native price converted to AUD, or null if no rate available. */
+  price_aud: number | null;
   in_stock: boolean;
   title: string | null;
   source: string;
+  /** Previous native price for this URL. */
   previous_price: number | null;
+  /** Previous AUD-converted price for this URL. */
+  previous_price_aud: number | null;
 }
 
 export interface PriceCheckAggregatedData {
   productId: number;
   results: PriceCheckUrlResult[];
+  /** Lowest price across URLs, in AUD. */
   lowestPrice: number | null;
+  /** Average price across URLs, in AUD. */
   averagePrice: number | null;
   checkedAt: string;
 }
@@ -95,12 +104,16 @@ export interface UrlData {
 }
 
 export interface ProductPriceSummary {
+  /** Initial price in AUD. */
   initialPrice: number | null;
   initialRetailer: string | null;
   initialDate: string | null;
+  /** Native currency of the initial price (for display context). */
   initialCurrency: string | null;
+  /** Current lowest price in AUD. */
   currentLowest: number | null;
   currentLowestRetailer: string | null;
+  /** Native currency of the current-lowest URL (for display context). */
   currentLowestCurrency: string | null;
   percentageDecrease: number | null;
 }

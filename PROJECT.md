@@ -15,7 +15,6 @@ Stop manually checking prices. Add a product once, attach the URLs from each ret
 - Persist a price history log (only on change, or on every check — TBD)
 - Notify on price change via Telegram
 - Web UI to manage products and view history
-- CLI for the same management actions and ad-hoc one-off checks
 
 **Out of scope (for now)**
 - Multi-user / auth
@@ -29,13 +28,13 @@ pnpm workspace monorepo. Each package is independent and depends on `@spawncampe
 ```
 packages/
   core/          shared domain logic — products, scraping, price comparison, storage, notifications
-  cli/           command-line interface — `pt <command>`
+  api/           Hono REST API exposing core CRUD operations
   web/           Vite + React frontend for managing products
-  telegram-bot/  outbound notifier (and possibly inbound commands later)
+  messenger/     generic messenger abstraction (Telegram + mock adapters)
 ```
 
 **Data flow**
-1. A scheduled run (cron / CLI) calls `checkPrice()` in core
+1. A scheduled cron run calls `checkAllProducts()` in core
 2. Core fetches each active product URL, parses price
 3. Core compares against the latest stored price
 4. On change → write to price history → fire Telegram notification
@@ -45,7 +44,7 @@ packages/
 - TypeScript across the board
 - pnpm workspaces
 - Vite + React for `web`
-- Node CLI for `cli`
+- Hono for `api`
 - Telegram bot API for notifications
 - **Storage: SQLite (leaning `better-sqlite3`)** — see `Storage` below
 
@@ -63,12 +62,12 @@ Sketch:
 ## Open questions
 
 - Log every check, or only on change? (Logging every check makes "price stable for N days" trivial; logging only changes keeps the table small.)
-- Where does the scheduler live — inside `cli` as `pt run`, a separate `scheduler` package, or just a system cron entry?
+- Where does the scheduler live — embedded in `api` (today), a separate `scheduler` package, or just a system cron entry?
 - Scrape strategy per retailer: shared selector config in DB, or per-retailer adapter modules in `core`?
 - Notification de-dupe window — how long after a notification do we suppress further ones for the same product?
 
 ## Working principles
 
 - I'm writing the code by hand. AI is for decision-making and second opinions, not implementation.
-- Keep `core` framework-agnostic so CLI, web backend and bot all share one source of truth.
+- Keep `core` framework-agnostic so the API, web backend and any future consumer all share one source of truth.
 - Defer everything that isn't on the critical path to "watch a product, get notified".

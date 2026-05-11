@@ -30,6 +30,7 @@ import {
   getRecentFailuresForUrl,
   getFailureSummaryForUrl,
   getFailureSummariesForProduct,
+  sendDigest,
 } from '@spawncamper/core';
 
 const app = new Hono();
@@ -273,6 +274,16 @@ app.post('/api/cron/run', (c) => {
     .catch((err) => console.error('[cron] manual run threw unexpectedly:', err));
 
   return c.json({ success: true, message: 'Price check started' });
+});
+
+// ── Digest ──────────────────────────────────────────────
+
+// Build and send the daily digest. `?dry_run=true` returns the rendered text
+// without dispatching — useful for previewing layout from the web UI / curl.
+app.post('/api/digest/send', async (c) => {
+  const dryRun = c.req.query('dry_run') === 'true';
+  const result = await sendDigest({ dryRun });
+  return c.json(result);
 });
 
 const port = 3001;

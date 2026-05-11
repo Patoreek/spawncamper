@@ -103,5 +103,10 @@ export type {
   RunPriceCheckResult,
 } from './cron/types';
 
+// Digest (daily / weekly summary across active products)
+export { buildDigest, sendDigest } from './digest/service';
+export { formatDigest } from './digest/formatter';
+export type { DigestRow, DigestPayload, DigestSendResult } from './digest/types';
+
 // Types
 export type { ApiResponse, SuccessResponse, ErrorResponse } from './db/types';

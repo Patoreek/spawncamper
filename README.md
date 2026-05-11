@@ -43,6 +43,11 @@ SCRAPER_API_KEY=''
 # Telegram notifications (both required to send messages)
 TELEGRAM_BOT_TOKEN=''
 TELEGRAM_CHAT_ID=''
+
+# Daily digest (opt-in). Cron expression in DIGEST_TZ.
+# Unset = digest disabled. DIGEST_TZ defaults to Australia/Sydney.
+DIGEST_CRON=''
+DIGEST_TZ=''
 ```
 
 ### Amazon PA-API Setup
@@ -75,6 +80,22 @@ Used to deliver price-drop and recovery notifications. If either variable is uns
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram and run `/newbot` to create a bot — copy the token it gives you into `TELEGRAM_BOT_TOKEN`.
 2. DM your new bot once (so it can message you back), then open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy the `chat.id` from the response into `TELEGRAM_CHAT_ID`.
+
+### Daily Digest
+
+A daily digest is a single Telegram message summarising every active product — current lowest price + retailer, percentage change since first checked, and any out-of-stock flags. It runs alongside the per-event alerts and gives a steady low-volume signal even on days when nothing crossed an alert threshold.
+
+The digest is **opt-in**:
+
+- `DIGEST_CRON` — standard 5-field cron expression. Unset means the digest is disabled. Example: `0 8 * * *` for 8am every day, `0 8 * * 1` for Mondays only.
+- `DIGEST_TZ` — IANA timezone for the cron expression. Defaults to `Australia/Sydney`.
+
+Manual trigger (also works for previewing layout):
+
+```bash
+curl -X POST http://localhost:3001/api/digest/send                # actually send
+curl -X POST 'http://localhost:3001/api/digest/send?dry_run=true' # render only, no Telegram dispatch
+```
 
 ### Playwright Setup
 

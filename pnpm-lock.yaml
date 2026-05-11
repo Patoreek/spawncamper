@@ -66,17 +66,7 @@ importers:
         specifier: ^1.59.1
         version: 1.59.1
 
-  packages/telegram-bot:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^2.0.1
-        version: 2.0.1(hono@4.12.16)
-      '@spawncamper/core':
-        specifier: workspace:*
-        version: link:../core
-      hono:
-        specifier: ^4.12.16
-        version: 4.12.16
+  packages/messenger: {}
 
   packages/web:
     dependencies:

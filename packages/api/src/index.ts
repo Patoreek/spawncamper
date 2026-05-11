@@ -1,7 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import cron from 'node-cron';
 import {
   createProduct,
   getAllProducts,
@@ -18,13 +17,15 @@ import {
   deleteProductUrl,
   checkPrices,
   checkSingleUrl,
-  checkAllProducts,
   getDataFromUrl,
   getLatestPriceChecksForProduct,
   getAllPreviousPriceChecks,
   getProductPriceSummary,
   sendTestMessage,
   clearNotificationsFor,
+  runPriceCheck,
+  sweepStaleRunning,
+  getCronStatus,
 } from '@spawncamper/core';
 
 const app = new Hono();
@@ -36,50 +37,13 @@ app.onError((err, c) => {
   return c.json({ success: false, error: { code: 'SERVER_ERROR', message } }, 500);
 });
 
-// ── Cron State ─────────────────────────────────────────
+// Sweep any 'running' rows left over from a crashed/killed previous run so the
+// status panel doesn't report a phantom in-flight check.
+sweepStaleRunning();
 
-const cronState = {
-  isRunning: false,
-  lastRunAt: null as string | null,
-  lastRunStatus: null as 'success' | 'error' | null,
-  lastRunError: null as string | null,
-  productsChecked: 0,
-  urlsChecked: 0,
-};
-
-async function runScheduledCheck() {
-  if (cronState.isRunning) {
-    console.log('[cron] Skipping — previous run still in progress');
-    return;
-  }
-
-  cronState.isRunning = true;
-  console.log(`[cron] Starting scheduled price check at ${new Date().toISOString()}`);
-
-  try {
-    const result = await checkAllProducts();
-    cronState.lastRunAt = result.completedAt;
-    cronState.lastRunStatus = 'success';
-    cronState.lastRunError = null;
-    cronState.productsChecked = result.productsChecked;
-    cronState.urlsChecked = result.urlsChecked;
-    console.log(`[cron] Completed: ${result.productsChecked} products, ${result.urlsChecked} URLs checked`);
-  } catch (err) {
-    cronState.lastRunAt = new Date().toISOString();
-    cronState.lastRunStatus = 'error';
-    cronState.lastRunError = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[cron] Failed:', err);
-  } finally {
-    cronState.isRunning = false;
-  }
-}
-
-// Schedule: 8:30pm every night Sydney time
-const cronJob = cron.schedule('30 20 * * *', runScheduledCheck, {
-  timezone: 'Australia/Sydney',
-});
-
-console.log('[cron] Scheduled daily price check at 20:30 Australia/Sydney');
+// Schedule string is owned by `@spawncamper/scheduler`; mirrored here purely
+// for display in the status panel. Keep in sync if the scheduler changes.
+const SCHEDULE_DESCRIPTION = '20:30 daily (Australia/Sydney)';
 
 // ── Products ────────────────────────────────────────────
 
@@ -240,22 +204,31 @@ app.post('/api/scan-url', async (c) => {
 
 // ── Cron Control ────────────────────────────────────────
 
-// Get cron status
+// Get cron status (reads from `cron_runs`; survives API restarts)
 app.get('/api/cron/status', (c) => {
   return c.json({
-    schedule: '20:30 daily (Australia/Sydney)',
-    ...cronState,
+    schedule: SCHEDULE_DESCRIPTION,
+    ...getCronStatus(),
   });
 });
 
-// Trigger manual run (fire-and-forget, returns immediately)
+// Trigger manual run (fire-and-forget, returns immediately).
+// The unique partial index on cron_runs guarantees only one run is in flight
+// at any time across both the API and scheduler processes.
 app.post('/api/cron/run', (c) => {
-  if (cronState.isRunning) {
+  if (getCronStatus().isRunning) {
     return c.json({ success: false, error: { code: 'ALREADY_RUNNING', message: 'A price check is already in progress' } }, 409);
   }
 
-  // Fire and forget — don't await
-  runScheduledCheck();
+  // Fire and forget. If a race squeezes in between the gate above and the
+  // INSERT inside runPriceCheck, the unique index rejects it and we just log.
+  runPriceCheck('manual')
+    .then((result) => {
+      if (!result.ok && result.reason === 'already_running') {
+        console.log('[cron] manual trigger lost the race to another run');
+      }
+    })
+    .catch((err) => console.error('[cron] manual run threw unexpectedly:', err));
 
   return c.json({ success: true, message: 'Price check started' });
 });

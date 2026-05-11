@@ -60,6 +60,25 @@ import type Database from 'better-sqlite3';
       rate       REAL NOT NULL,
       fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS cron_runs (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      source           TEXT    NOT NULL CHECK (source IN ('scheduled', 'manual')),
+      status           TEXT    NOT NULL CHECK (status IN ('running', 'success', 'error')),
+      started_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at     TEXT,
+      products_checked INTEGER NOT NULL DEFAULT 0,
+      urls_checked     INTEGER NOT NULL DEFAULT 0,
+      error            TEXT
+    );
+
+    -- Race-safe single-runner constraint. Two concurrent processes (API +
+    -- scheduler) cannot both insert a 'running' row.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_cron_runs_only_one_running
+      ON cron_runs(status) WHERE status = 'running';
+
+    CREATE INDEX IF NOT EXISTS idx_cron_runs_started_at
+      ON cron_runs(started_at DESC);
   `;
 
   // Idempotent column additions for pre-existing databases.

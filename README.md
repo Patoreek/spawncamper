@@ -9,11 +9,12 @@ pnpm install
 pnpm -r build              # build everything once
 ```
 
-Run the API and web frontend (two terminals):
+Run the API, scheduler and web frontend (three terminals — or just `pnpm dev` from the root to start all in parallel):
 
 ```bash
-pnpm --filter @spawncamper/api dev   # API on :3001
-pnpm --filter web dev                # Web UI on :5173
+pnpm --filter @spawncamper/api dev          # API on :3001
+pnpm --filter @spawncamper/scheduler dev    # Nightly price-check timer
+pnpm --filter web dev                       # Web UI on :5173
 ```
 
 Other packages:
@@ -27,8 +28,9 @@ pnpm --filter @spawncamper/core dev             # run core dev script / migratio
 Copy `.env.example` or create `.env` in the project root:
 
 ```bash
-# Database (SQLite) — path relative to the running package
-SPAWNCAMPER_DB='../../spawncamper.db'
+# Database (SQLite) — relative paths anchor to the workspace root, so the
+# API and scheduler open the same file. Absolute paths are used as-is.
+SPAWNCAMPER_DB='spawncamper.db'
 
 # Amazon Product Advertising API (PA-API v5)
 AMAZON_ACCESS_KEY=''
@@ -86,6 +88,7 @@ cd packages/core && npx playwright install chromium
 |---------|-------------|------|
 | `packages/core` | Shared domain logic — products, URLs, price checks, scraping | — |
 | `packages/api` | Hono REST API exposing core CRUD operations | 3001 |
+| `packages/scheduler` | Nightly cron process that triggers `checkAllProducts` | — |
 | `packages/web` | React + Vite frontend for managing products & URLs | 5173 |
 | `packages/messenger` | Generic messenger abstraction with Telegram + mock adapters | — |
 

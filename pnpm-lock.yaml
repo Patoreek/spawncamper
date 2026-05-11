@@ -36,13 +36,6 @@ importers:
       hono:
         specifier: ^4.12.16
         version: 4.12.16
-      node-cron:
-        specifier: ^4.2.1
-        version: 4.2.1
-    devDependencies:
-      '@types/node-cron':
-        specifier: ^3.0.11
-        version: 3.0.11
 
   packages/core:
     dependencies:
@@ -64,6 +57,19 @@ importers:
         version: 2.1.9(@types/node@25.6.0)(lightningcss@1.32.0)
 
   packages/messenger: {}
+
+  packages/scheduler:
+    dependencies:
+      '@spawncamper/core':
+        specifier: workspace:*
+        version: link:../core
+      node-cron:
+        specifier: ^4.2.1
+        version: 4.2.1
+    devDependencies:
+      '@types/node-cron':
+        specifier: ^3.0.11
+        version: 3.0.11
 
   packages/web:
     dependencies:

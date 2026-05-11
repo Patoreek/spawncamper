@@ -68,5 +68,15 @@ export type {
 // FX (currency conversion to AUD)
 export { ensureRate, convertToAudOrNull } from './fx/service';
 
+// Cron / scheduled-run tracking
+export { runPriceCheck, sweepStaleRunning, getCronStatus } from './cron/service';
+export type {
+  CronRun,
+  CronRunSource,
+  CronRunStatus,
+  CronStatusView,
+  RunPriceCheckResult,
+} from './cron/types';
+
 // Types
 export type { ApiResponse, SuccessResponse, ErrorResponse } from './db/types';

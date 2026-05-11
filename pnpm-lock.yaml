@@ -56,6 +56,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@spawncamper/messenger':
+        specifier: workspace:*
+        version: link:../messenger
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0

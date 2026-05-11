@@ -2,6 +2,7 @@ import type {
   Product, CreateProductInput, ProductUrl, CreateProductUrlInput,
   ApiResponse, LatestPriceCheck, PriceCheckAggregatedData,
   PriceCheckUrlResult, UrlData, CronStatus, ProductPriceSummary,
+  NotifyRuleInput,
 } from './types';
 
 // ── Products ────────────────────────────────────────────
@@ -28,6 +29,24 @@ export async function updateProductStatus(id: number, action: 'pause' | 'activat
 
 export async function deleteProduct(id: number): Promise<ApiResponse> {
   const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+  return res.json();
+}
+
+// ── Notifications ───────────────────────────────────────
+
+export async function updateNotifyRule(id: number, rule: NotifyRuleInput): Promise<Product> {
+  const res = await fetch(`/api/products/${id}/notify-rule`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rule),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message ?? 'Failed to update rule');
+  return data;
+}
+
+export async function sendNotifyTest(id: number): Promise<ApiResponse> {
+  const res = await fetch(`/api/products/${id}/notify-test`, { method: 'POST' });
   return res.json();
 }
 

@@ -9,6 +9,9 @@ import type Database from 'better-sqlite3';
       target_price REAL,
       status       TEXT    NOT NULL DEFAULT 'active'
                    CHECK (status IN ('active', 'paused', 'archived')),
+      notify_enabled INTEGER NOT NULL DEFAULT 0 CHECK (notify_enabled IN (0, 1)),
+      notify_kind    TEXT,
+      notify_value   REAL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -42,6 +45,7 @@ import type Database from 'better-sqlite3';
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
       kind       TEXT    NOT NULL,
+      price      REAL,
       sent_at    TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -52,6 +56,18 @@ import type Database from 'better-sqlite3';
       ON notifications(product_id, kind, sent_at DESC);
   `;
 
+  // Idempotent column additions for pre-existing databases.
+  // SQLite's ALTER TABLE ADD COLUMN errors if the column already exists, so we swallow.
+  const ALTERS: string[] = [
+    `ALTER TABLE products ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE products ADD COLUMN notify_kind TEXT`,
+    `ALTER TABLE products ADD COLUMN notify_value REAL`,
+    `ALTER TABLE notifications ADD COLUMN price REAL`,
+  ];
+
   export const migrate = (db: Database.Database) => {
     db.exec(SCHEMA);
+    for (const alter of ALTERS) {
+      try { db.exec(alter); } catch { /* column already exists */ }
+    }
   };

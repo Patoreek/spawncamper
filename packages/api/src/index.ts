@@ -9,6 +9,7 @@ import {
   activateProduct,
   archiveProduct,
   deleteProduct,
+  updateNotifyRule,
   createProductUrl,
   getProductUrlById,
   getProductUrlsForProduct,
@@ -22,6 +23,8 @@ import {
   getLatestPriceChecksForProduct,
   getAllPreviousPriceChecks,
   getProductPriceSummary,
+  sendTestMessage,
+  clearNotificationsFor,
 } from '@spawncamper/core';
 
 const app = new Hono();
@@ -109,6 +112,39 @@ app.patch('/api/products/:id/archive', (c) => {
 app.delete('/api/products/:id', (c) => {
   const id = Number(c.req.param('id'));
   return c.json(deleteProduct(id));
+});
+
+// ── Notifications ───────────────────────────────────────
+
+app.patch('/api/products/:id/notify-rule', async (c) => {
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json();
+  try {
+    const updated = updateNotifyRule(id, {
+      enabled: !!body.enabled,
+      kind: body.kind ?? null,
+      value: body.value === undefined || body.value === null || body.value === '' ? null : Number(body.value),
+    });
+    if (!updated) {
+      return c.json({ success: false, error: { code: 'PRODUCT_NOT_FOUND', message: `No product with id ${id}` } }, 404);
+    }
+    // Rule changed — clear stale alert/recovery state so the new rule starts fresh.
+    clearNotificationsFor(id);
+    return c.json(updated);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid rule';
+    return c.json({ success: false, error: { code: 'INVALID_RULE', message } }, 400);
+  }
+});
+
+app.post('/api/products/:id/notify-test', async (c) => {
+  const id = Number(c.req.param('id'));
+  const result = await sendTestMessage(id);
+  if (result.sent) return c.json({ success: true, message: 'Test message sent' });
+  return c.json(
+    { success: false, error: { code: 'NOT_SENT', message: result.skippedReason ?? 'Message not sent' } },
+    result.skippedReason === 'product_not_found' ? 404 : 503,
+  );
 });
 
 // ── Product URLs ────────────────────────────────────────

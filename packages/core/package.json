@@ -16,6 +16,7 @@
     "dev-og": "tsc --watch"
   },
   "dependencies": {
+    "@spawncamper/messenger": "workspace:*",
     "better-sqlite3": "^12.9.0",
     "cheerio": "^1.2.0",
     "playwright": "^1.59.1"

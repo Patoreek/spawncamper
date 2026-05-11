@@ -1,6 +1,7 @@
 import { getProductUrlsForProduct, getProductUrlById } from '../product_urls/service';
 import { getAllProducts } from '../products/service';
 import { createPriceCheck, getPreviousPriceCheck } from '../price_checks/service';
+import { evaluateAndNotify } from '../notifications/service';
 import { extractWithCheerio } from './cheerio';
 import { extractWithPlaywright } from './playwright';
 import { extractWithProxy } from './proxy';
@@ -59,13 +60,22 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
 
     const prices = results.map((r) => r.price).filter((p): p is number => p !== null);
 
-    return {
+    const aggregated: PriceCheckAggregatedData = {
         productId,
         results,
         lowestPrice: prices.length ? Math.min(...prices) : null,
         averagePrice: prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null,
         checkedAt: new Date().toISOString(),
     };
+
+    // Fire-and-don't-block: a messenger failure shouldn't surface as a price-check failure.
+    try {
+        await evaluateAndNotify(productId, aggregated);
+    } catch (err) {
+        console.error('[price_checker] notify dispatch failed:', err);
+    }
+
+    return aggregated;
 };
 
 export const checkSingleUrl = async (productUrlId: number): Promise<PriceCheckUrlResult | null> => {

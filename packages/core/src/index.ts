@@ -1,13 +1,21 @@
 // Products
 export {
   createProduct,
+  getProductById,
   getAllProducts,
   pauseProduct,
   activateProduct,
   archiveProduct,
   deleteProduct,
+  updateNotifyRule,
 } from './products/service';
-export type { Product, CreateProductInput, ProductStatus } from './products/types';
+export type {
+  Product,
+  CreateProductInput,
+  ProductStatus,
+  NotifyKind,
+  NotifyRuleInput,
+} from './products/types';
 
 // Product URLs
 export {
@@ -43,6 +51,19 @@ export {
   getProductPriceSummary,
 } from './price_checks/service';
 export type { PriceCheck, PriceCheckResult, LatestPriceCheck, ProductPriceSummary } from './price_checks/types';
+
+// Notifications
+export {
+  evaluateAndNotify,
+  sendTestMessage,
+  clearNotificationsFor,
+} from './notifications/service';
+export type {
+  NotifyResult,
+  NotifyDecision,
+  NotificationKind,
+  NotificationRecord,
+} from './notifications/types';
 
 // Types
 export type { ApiResponse, SuccessResponse, ErrorResponse } from './db/types';

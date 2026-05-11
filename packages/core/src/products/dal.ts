@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { CreateProductInput, Product } from './types';
+import type { CreateProductInput, NotifyRuleInput, Product } from './types';
 import type { ApiResponse } from '../db/types';
 
 export class ProductDAL {
@@ -11,6 +11,7 @@ export class ProductDAL {
   private readonly activateProductStmt: Database.Statement;
   private readonly archiveProductStmt: Database.Statement;
   private readonly deleteProductStmt: Database.Statement;
+  private readonly updateNotifyRuleStmt: Database.Statement;
 
   constructor(db: Database.Database) {
     // Prepare once, reuse forever — much faster than re-preparing per call
@@ -44,6 +45,15 @@ export class ProductDAL {
     this.deleteProductStmt = db.prepare(`
       DELETE FROM products
       WHERE id = @id
+    `);
+    this.updateNotifyRuleStmt = db.prepare(`
+      UPDATE products
+      SET notify_enabled = @enabled,
+          notify_kind    = @kind,
+          notify_value   = @value,
+          updated_at     = CURRENT_TIMESTAMP
+      WHERE id = @id
+      RETURNING *
     `);
   }
 
@@ -121,6 +131,15 @@ export class ProductDAL {
     };
   };
   
+  updateNotifyRule(id: number, rule: NotifyRuleInput): Product | null {
+    return (this.updateNotifyRuleStmt.get({
+      id,
+      enabled: rule.enabled ? 1 : 0,
+      kind: rule.kind,
+      value: rule.value,
+    }) as Product | undefined) ?? null;
+  }
+
   deleteProduct(id: number) {
     const result = this.deleteProductStmt.run({ id: Number(id)});
     if (result.changes === 0){

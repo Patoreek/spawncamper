@@ -1,10 +1,25 @@
 export type ProductStatus = 'active' | 'paused' | 'archived';
 
+export type NotifyKind =
+  | 'any_drop'
+  | 'target_price'
+  | 'percent_below_initial'
+  | 'absolute_below';
+
+export interface NotifyRuleInput {
+  enabled: boolean;
+  kind: NotifyKind | null;
+  value: number | null;
+}
+
 export interface Product {
   id: number;
   name: string;
   target_price: number | null;
   status: ProductStatus;
+  notify_enabled: 0 | 1;
+  notify_kind: NotifyKind | null;
+  notify_value: number | null;
   created_at: string;
   updated_at: string;
 }

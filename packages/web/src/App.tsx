@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react'
-import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary } from './types'
+import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind } from './types'
 import * as api from './api'
 import './App.css'
+
+const NOTIFY_KIND_LABELS: Record<NotifyKind, string> = {
+  any_drop: 'On any price drop',
+  target_price: 'When ≤ target price',
+  percent_below_initial: '% below initial price',
+  absolute_below: 'Below fixed amount',
+}
+
+const NOTIFY_VALUE_LABEL: Record<NotifyKind, string | null> = {
+  any_drop: null,
+  target_price: null, // uses product.target_price
+  percent_below_initial: '%',
+  absolute_below: '$',
+}
 
 function App() {
   const [products, setProducts] = useState<Product[]>([])
@@ -14,6 +28,8 @@ function App() {
   const [checkingProduct, setCheckingProduct] = useState<number | null>(null)
   const [scanningUrl, setScanningUrl] = useState<number | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [testingProduct, setTestingProduct] = useState<number | null>(null)
+  const [testFeedback, setTestFeedback] = useState<{ productId: number; ok: boolean; message: string } | null>(null)
 
   const loadProducts = async () => {
     const data = await api.fetchProducts(statusFilter || undefined)
@@ -84,6 +100,33 @@ function App() {
     } finally {
       setCheckingProduct(null)
     }
+  }
+
+  const handleTestMessage = async (productId: number) => {
+    setTestingProduct(productId)
+    setTestFeedback(null)
+    try {
+      const res = await api.sendNotifyTest(productId)
+      setTestFeedback({
+        productId,
+        ok: res.success,
+        message: res.success ? 'Sent' : (res.error?.message ?? 'Send failed'),
+      })
+    } catch (err) {
+      setTestFeedback({
+        productId,
+        ok: false,
+        message: err instanceof Error ? err.message : 'Send failed',
+      })
+    } finally {
+      setTestingProduct(null)
+      setTimeout(() => setTestFeedback((curr) => (curr?.productId === productId ? null : curr)), 4000)
+    }
+  }
+
+  const handleSaveNotifyRule = async (productId: number, rule: { enabled: boolean; kind: NotifyKind | null; value: number | null }) => {
+    await api.updateNotifyRule(productId, rule)
+    await loadProducts()
   }
 
   const handleScanUrl = async (productId: number, urlId: number) => {
@@ -194,6 +237,19 @@ function App() {
                       >
                         {checkingProduct === product.id ? 'Checking...' : 'Check Prices'}
                       </button>
+                      <button
+                        className="btn btn-sm btn-muted"
+                        onClick={(e) => { e.stopPropagation(); handleTestMessage(product.id) }}
+                        disabled={testingProduct === product.id}
+                        title="Send a summary message via Telegram"
+                      >
+                        {testingProduct === product.id ? 'Sending...' : 'Send Test Message'}
+                      </button>
+                      {testFeedback?.productId === product.id && (
+                        <span className={`test-feedback ${testFeedback.ok ? 'ok' : 'err'}`}>
+                          {testFeedback.message}
+                        </span>
+                      )}
                       {product.status !== 'active' && (
                         <button className="btn btn-sm btn-success" onClick={() => handleStatusChange(product.id, 'activate')}>Activate</button>
                       )}
@@ -205,6 +261,11 @@ function App() {
                       )}
                       <button className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product.id)}>Delete</button>
                     </div>
+
+                    <NotifyRuleEditor
+                      product={product}
+                      onSave={(rule) => handleSaveNotifyRule(product.id, rule)}
+                    />
 
                     <div className="urls-section">
                       <h4>URLs</h4>
@@ -544,6 +605,103 @@ function AddUrlForm({ productId, onAdded }: { productId: number; onAdded: () => 
         </button>
       </div>
     </form>
+  )
+}
+
+function NotifyRuleEditor({
+  product,
+  onSave,
+}: {
+  product: Product
+  onSave: (rule: { enabled: boolean; kind: NotifyKind | null; value: number | null }) => Promise<void>
+}) {
+  const [enabled, setEnabled] = useState<boolean>(!!product.notify_enabled)
+  const [kind, setKind] = useState<NotifyKind>(product.notify_kind ?? 'any_drop')
+  const [value, setValue] = useState<string>(product.notify_value !== null ? String(product.notify_value) : '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  // Reset local state when product prop changes (e.g. after refresh)
+  useEffect(() => {
+    setEnabled(!!product.notify_enabled)
+    setKind(product.notify_kind ?? 'any_drop')
+    setValue(product.notify_value !== null ? String(product.notify_value) : '')
+  }, [product.id, product.notify_enabled, product.notify_kind, product.notify_value])
+
+  const valueUnit = NOTIFY_VALUE_LABEL[kind]
+  const needsValue = valueUnit !== null
+  const needsTargetPrice = kind === 'target_price'
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSaving(true)
+    try {
+      const parsedValue = needsValue && value.trim() !== '' ? Number(value) : null
+      await onSave({
+        enabled,
+        kind: enabled ? kind : null,
+        value: enabled ? parsedValue : null,
+      })
+      setSavedAt(Date.now())
+      setTimeout(() => setSavedAt((curr) => (curr && Date.now() - curr >= 2000 ? null : curr)), 2100)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="notify-section">
+      <h4>Notifications</h4>
+      <form className="notify-form" onSubmit={handleSubmit}>
+        <label className="notify-toggle">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          <span>Enabled</span>
+        </label>
+
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value as NotifyKind)}
+          disabled={!enabled}
+        >
+          {(Object.keys(NOTIFY_KIND_LABELS) as NotifyKind[]).map((k) => (
+            <option key={k} value={k}>{NOTIFY_KIND_LABELS[k]}</option>
+          ))}
+        </select>
+
+        {needsValue && (
+          <div className="notify-value-input">
+            <input
+              type="number"
+              step="0.01"
+              placeholder={valueUnit === '%' ? 'e.g. 15' : 'e.g. 400'}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              disabled={!enabled}
+              required={enabled}
+            />
+            <span className="notify-unit">{valueUnit}</span>
+          </div>
+        )}
+
+        {needsTargetPrice && product.target_price === null && (
+          <span className="notify-hint">Set the product's target price above to use this rule.</span>
+        )}
+        {needsTargetPrice && product.target_price !== null && (
+          <span className="notify-hint">Uses target: ${product.target_price.toFixed(2)}</span>
+        )}
+
+        <button className="btn btn-sm btn-primary" type="submit" disabled={saving}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+
+        {savedAt && <span className="notify-saved">Saved</span>}
+        {error && <span className="notify-error">{error}</span>}
+      </form>
+    </div>
   )
 }
 

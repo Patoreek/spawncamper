@@ -1,6 +1,16 @@
 import type Database from 'better-sqlite3';
 import type { PriceCheckResult, PriceCheck, LatestPriceCheck } from './types';
-import type { ApiResponse } from '../db/types';
+
+export interface PriceHistoryRow {
+    id: number;
+    product_url_id: number;
+    price: number;
+    currency: string;
+    in_stock: number;
+    created_at: string;
+    retailer: string;
+    url: string;
+}
 
 export class PriceCheckDAL {
 
@@ -8,6 +18,7 @@ export class PriceCheckDAL {
     private readonly findAllPreviousPriceStmt: Database.Statement;
     private readonly findLatestForProductStmt: Database.Statement;
     private readonly findFirstForProductStmt: Database.Statement;
+    private readonly findHistoryForProductStmt: Database.Statement;
     private readonly createStmt: Database.Statement;
 
     constructor(db: Database.Database) {
@@ -48,6 +59,20 @@ export class PriceCheckDAL {
             ORDER BY pc.created_at ASC
             LIMIT 1
         `);
+        this.findHistoryForProductStmt = db.prepare(`
+            SELECT pc.id,
+                   pc.product_url_id,
+                   pc.price,
+                   pc.currency,
+                   pc.in_stock,
+                   pc.created_at,
+                   pu.retailer,
+                   pu.url
+            FROM price_checks pc
+            INNER JOIN product_urls pu ON pc.product_url_id = pu.id
+            WHERE pu.product_id = @productId
+            ORDER BY pc.product_url_id, pc.created_at ASC
+        `);
     }
 
     create(input: PriceCheckResult & { product_url_id: number }): PriceCheck {
@@ -73,5 +98,9 @@ export class PriceCheckDAL {
 
       findFirstForProduct(productId: number): { price: number; currency: string; created_at: string; retailer: string } | null {
         return (this.findFirstForProductStmt.get({ productId }) as { price: number; currency: string; created_at: string; retailer: string } | undefined) ?? null;
+      }
+
+      findHistoryForProduct(productId: number): PriceHistoryRow[] {
+        return this.findHistoryForProductStmt.all({ productId }) as PriceHistoryRow[];
       }
 }

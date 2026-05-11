@@ -4,7 +4,9 @@ export type NotifyKind =
   | 'any_drop'
   | 'target_price'
   | 'percent_below_initial'
-  | 'absolute_below';
+  | 'absolute_below'
+  | 'back_in_stock'
+  | 'out_of_stock';
 
 export interface NotifyRuleInput {
   enabled: boolean;

@@ -14,6 +14,8 @@ const ctx = (overrides: Partial<EvaluateContext> = {}): EvaluateContext => ({
   currentLowest: 100,
   initialPrice: 200,
   previousLowest: 150,
+  currentlyInStock: true,
+  previouslyInStock: true,
   ...overrides,
 });
 
@@ -134,6 +136,83 @@ describe('evaluateRule — percent_below_initial', () => {
   });
 });
 
+describe('evaluateRule — back_in_stock', () => {
+  const stockRule: EvaluateContext['rule'] = { kind: 'back_in_stock', value: null, targetPrice: null };
+
+  it('does not match when previouslyInStock is null (no previous data)', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, currentlyInStock: true, previouslyInStock: null })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('does not match when currentlyInStock is null (no scrape data)', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, currentlyInStock: null, previouslyInStock: false })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('matches on the out→in transition', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: false, currentlyInStock: true })),
+    ).toEqual({ matches: true, threshold: null });
+  });
+
+  it('does not match when stock has stayed in', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: true, currentlyInStock: true })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('does not match when stock has stayed out', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: false, currentlyInStock: false })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('does not match on the in→out transition (that is out_of_stock territory)', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: true, currentlyInStock: false })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+});
+
+describe('evaluateRule — out_of_stock', () => {
+  const stockRule: EvaluateContext['rule'] = { kind: 'out_of_stock', value: null, targetPrice: null };
+
+  it('does not match when stock context is null', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, currentlyInStock: null, previouslyInStock: true })),
+    ).toEqual({ matches: false, threshold: null });
+    expect(
+      evaluateRule(ctx({ rule: stockRule, currentlyInStock: false, previouslyInStock: null })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('matches on the in→out transition', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: true, currentlyInStock: false })),
+    ).toEqual({ matches: true, threshold: null });
+  });
+
+  it('does not match on the out→in transition', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: false, currentlyInStock: true })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('does not match when stock has stayed in', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: true, currentlyInStock: true })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+
+  it('does not match when stock has stayed out', () => {
+    expect(
+      evaluateRule(ctx({ rule: stockRule, previouslyInStock: false, currentlyInStock: false })),
+    ).toEqual({ matches: false, threshold: null });
+  });
+});
+
 describe('evaluateRule — absolute_below', () => {
   it('does not match when value is null', () => {
     expect(
@@ -164,6 +243,22 @@ describe('evaluateRule — absolute_below', () => {
 });
 
 // ── decide ───────────────────────────────────────────────
+
+describe('evaluateRule — no current price', () => {
+  it('every price rule returns no-match when currentLowest is null', () => {
+    const kinds: Array<EvaluateContext['rule']> = [
+      { kind: 'any_drop', value: null, targetPrice: null },
+      { kind: 'target_price', value: null, targetPrice: 100 },
+      { kind: 'percent_below_initial', value: 25, targetPrice: null },
+      { kind: 'absolute_below', value: 100, targetPrice: null },
+    ];
+    for (const rule of kinds) {
+      expect(
+        evaluateRule(ctx({ rule, currentLowest: null })),
+      ).toEqual({ matches: false, threshold: null });
+    }
+  });
+});
 
 describe('decide — matches=true', () => {
   it('alerts when there is no prior notification', () => {
@@ -208,6 +303,64 @@ describe('decide — matches=true', () => {
     expect(decide(ctx({ currentLowest: 50 }), matched(), alertRecord(null))).toEqual({
       action: 'none',
     });
+  });
+});
+
+describe('decide — stock rules', () => {
+  const backInStock: EvaluateContext['rule'] = { kind: 'back_in_stock', value: null, targetPrice: null };
+  const outOfStock: EvaluateContext['rule'] = { kind: 'out_of_stock', value: null, targetPrice: null };
+
+  it('back_in_stock alerts on match regardless of latest notification', () => {
+    // The state machine for price rules would skip a re-alert here; stock
+    // rules deliberately bypass that because the match itself encodes a
+    // discrete transition.
+    expect(
+      decide(
+        ctx({ rule: backInStock, previouslyInStock: false, currentlyInStock: true, currentLowest: 89 }),
+        matched(),
+        alertRecord(95),
+      ),
+    ).toEqual({ action: 'alert', price: 89, previousLowest: null });
+  });
+
+  it('back_in_stock alerts with price=0 when current price unavailable', () => {
+    expect(
+      decide(
+        ctx({ rule: backInStock, previouslyInStock: false, currentlyInStock: true, currentLowest: null }),
+        matched(),
+        null,
+      ),
+    ).toEqual({ action: 'alert', price: 0, previousLowest: null });
+  });
+
+  it('back_in_stock does nothing when not matching', () => {
+    expect(
+      decide(
+        ctx({ rule: backInStock, previouslyInStock: true, currentlyInStock: true }),
+        unmatched,
+        alertRecord(50),
+      ),
+    ).toEqual({ action: 'none' });
+  });
+
+  it('out_of_stock alerts on the in→out transition', () => {
+    expect(
+      decide(
+        ctx({ rule: outOfStock, previouslyInStock: true, currentlyInStock: false, currentLowest: 50 }),
+        matched(),
+        null,
+      ),
+    ).toEqual({ action: 'alert', price: 50, previousLowest: null });
+  });
+
+  it('stock rules never emit recovery', () => {
+    expect(
+      decide(
+        ctx({ rule: backInStock, previouslyInStock: true, currentlyInStock: true }),
+        unmatched,
+        alertRecord(89),
+      ),
+    ).toEqual({ action: 'none' });
   });
 });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind } from './types'
+import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind, PriceHistoryPoint } from './types'
 import * as api from './api'
+import { PriceHistoryChart } from './PriceHistoryChart'
 import './App.css'
 
 const NOTIFY_KIND_LABELS: Record<NotifyKind, string> = {
@@ -8,6 +9,8 @@ const NOTIFY_KIND_LABELS: Record<NotifyKind, string> = {
   target_price: 'When ≤ target price',
   percent_below_initial: '% below initial price',
   absolute_below: 'Below fixed amount',
+  back_in_stock: 'When back in stock',
+  out_of_stock: 'When goes out of stock',
 }
 
 const NOTIFY_VALUE_LABEL: Record<NotifyKind, string | null> = {
@@ -15,6 +18,8 @@ const NOTIFY_VALUE_LABEL: Record<NotifyKind, string | null> = {
   target_price: null, // uses product.target_price
   percent_below_initial: '%',
   absolute_below: '$',
+  back_in_stock: null,
+  out_of_stock: null,
 }
 
 function App() {
@@ -24,6 +29,7 @@ function App() {
   const [urlsByProduct, setUrlsByProduct] = useState<Record<number, ProductUrl[]>>({})
   const [latestPrices, setLatestPrices] = useState<Record<number, LatestPriceCheck[]>>({})
   const [summaries, setSummaries] = useState<Record<number, ProductPriceSummary>>({})
+  const [historyByProduct, setHistoryByProduct] = useState<Record<number, PriceHistoryPoint[]>>({})
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [checkingProduct, setCheckingProduct] = useState<number | null>(null)
   const [scanningUrl, setScanningUrl] = useState<number | null>(null)
@@ -49,12 +55,14 @@ function App() {
       return
     }
     setExpandedProduct(productId)
-    const [urls, prices] = await Promise.all([
+    const [urls, prices, history] = await Promise.all([
       api.fetchProductUrls(productId),
       api.fetchLatestPrices(productId),
+      api.fetchProductPriceHistory(productId),
     ])
     setUrlsByProduct((prev) => ({ ...prev, [productId]: urls }))
     setLatestPrices((prev) => ({ ...prev, [productId]: prices }))
+    setHistoryByProduct((prev) => ({ ...prev, [productId]: history }))
   }
 
   const handleStatusChange = async (id: number, action: 'pause' | 'activate' | 'archive') => {
@@ -84,12 +92,14 @@ function App() {
   }
 
   const refreshSummary = async (productId: number) => {
-    const [prices, summary] = await Promise.all([
+    const [prices, summary, history] = await Promise.all([
       api.fetchLatestPrices(productId),
       api.fetchPriceSummary(productId),
+      api.fetchProductPriceHistory(productId),
     ])
     setLatestPrices((prev) => ({ ...prev, [productId]: prices }))
     setSummaries((prev) => ({ ...prev, [productId]: summary }))
+    setHistoryByProduct((prev) => ({ ...prev, [productId]: history }))
   }
 
   const handleCheckPrices = async (productId: number) => {
@@ -280,6 +290,11 @@ function App() {
                         getPriceForUrl={(urlId) => getPriceForUrl(product.id, urlId)}
                       />
                       <AddUrlForm productId={product.id} onAdded={() => handleUrlAdded(product.id)} />
+                    </div>
+
+                    <div className="history-section">
+                      <h4>Price History (AUD)</h4>
+                      <PriceHistoryChart history={historyByProduct[product.id] ?? []} />
                     </div>
                   </div>
                 )}

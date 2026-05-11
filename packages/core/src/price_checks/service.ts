@@ -1,7 +1,7 @@
 import { db } from '../db/db';
 import { convertToAudOrNull } from '../fx/service';
 import { PriceCheckDAL } from './dal';
-import type { PriceCheck, PriceCheckResult, LatestPriceCheck, ProductPriceSummary } from './types';
+import type { PriceCheck, PriceCheckResult, LatestPriceCheck, ProductPriceSummary, PriceHistoryPoint } from './types';
 
 const priceCheckDAL = new PriceCheckDAL(db);
 
@@ -19,6 +19,26 @@ export const getAllPreviousPriceChecks = (productUrlId: number): PriceCheck[] =>
 
 export const getLatestPriceChecksForProduct = (productId: number): LatestPriceCheck[] => {
   return priceCheckDAL.findLatestForProduct(productId);
+};
+
+/**
+ * Full price history across all URLs of a product, ordered by URL then time.
+ * Each row carries both native price and AUD-converted price so the UI can
+ * plot one chart in AUD while still showing native values in tooltips.
+ */
+export const getProductPriceHistory = (productId: number): PriceHistoryPoint[] => {
+  const rows = priceCheckDAL.findHistoryForProduct(productId);
+  return rows.map((r) => ({
+    id: r.id,
+    product_url_id: r.product_url_id,
+    retailer: r.retailer,
+    url: r.url,
+    price: r.price,
+    currency: r.currency,
+    price_aud: convertToAudOrNull(r.price, r.currency),
+    in_stock: !!r.in_stock,
+    created_at: r.created_at,
+  }));
 };
 
 /**

@@ -21,6 +21,7 @@ import {
   getLatestPriceChecksForProduct,
   getAllPreviousPriceChecks,
   getProductPriceSummary,
+  getProductPriceHistory,
   sendTestMessage,
   clearNotificationsFor,
   runPriceCheck,
@@ -153,6 +154,12 @@ app.get('/api/products/:id/latest-prices', (c) => {
 app.get('/api/products/:id/price-summary', (c) => {
   const productId = Number(c.req.param('id'));
   return c.json(getProductPriceSummary(productId));
+});
+
+// Get full price history across all URLs (flat array of {product_url_id, retailer, price, price_aud, ...})
+app.get('/api/products/:id/price-history', (c) => {
+  const productId = Number(c.req.param('id'));
+  return c.json(getProductPriceHistory(productId));
 });
 
 // Get price history for a specific URL

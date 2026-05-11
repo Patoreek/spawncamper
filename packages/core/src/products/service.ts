@@ -9,6 +9,16 @@ const VALID_NOTIFY_KINDS: NotifyKind[] = [
   'target_price',
   'percent_below_initial',
   'absolute_below',
+  'back_in_stock',
+  'out_of_stock',
+];
+
+/** Notify kinds that don't require a numeric `value` field on the rule. */
+const KINDS_WITHOUT_VALUE: NotifyKind[] = [
+  'any_drop',
+  'target_price',
+  'back_in_stock',
+  'out_of_stock',
 ];
 
 export const createProduct = (input: CreateProductInput): Product => {
@@ -25,7 +35,7 @@ export const updateNotifyRule = (id: number, rule: NotifyRuleInput): Product | n
     if (!rule.kind || !VALID_NOTIFY_KINDS.includes(rule.kind)) {
       throw new Error(`Invalid notify_kind: ${rule.kind}`);
     }
-    if (rule.kind !== 'any_drop' && rule.kind !== 'target_price') {
+    if (!KINDS_WITHOUT_VALUE.includes(rule.kind)) {
       if (rule.value === null || rule.value === undefined || !isFinite(rule.value) || rule.value <= 0) {
         throw new Error(`notify_value must be a positive number for kind ${rule.kind}`);
       }

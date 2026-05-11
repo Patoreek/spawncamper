@@ -4,7 +4,9 @@ export type NotifyKind =
   | 'any_drop'
   | 'target_price'
   | 'percent_below_initial'
-  | 'absolute_below';
+  | 'absolute_below'
+  | 'back_in_stock'
+  | 'out_of_stock';
 
 export interface NotifyRuleInput {
   enabled: boolean;
@@ -70,6 +72,8 @@ export interface PriceCheckUrlResult {
   product_url_id: number;
   url: string;
   retailer: string;
+  /** Whether the scrape succeeded this run. False entries surface failed URLs for aggregation. */
+  success: boolean;
   /** Native price as extracted from the retailer. */
   price: number | null;
   /** ISO 4217 code of the native price. */
@@ -83,6 +87,8 @@ export interface PriceCheckUrlResult {
   previous_price: number | null;
   /** Previous AUD-converted price for this URL. */
   previous_price_aud: number | null;
+  /** Previous in-stock state for this URL; null when there's no previous data. */
+  previous_in_stock: boolean | null;
 }
 
 export interface PriceCheckAggregatedData {
@@ -101,6 +107,20 @@ export interface UrlData {
   in_stock: boolean;
   title: string | null;
   source: string;
+}
+
+/** One point on the per-product history chart (native + AUD-converted). */
+export interface PriceHistoryPoint {
+  id: number;
+  product_url_id: number;
+  retailer: string;
+  url: string;
+  price: number;
+  currency: string;
+  /** Native price converted to AUD; null if the FX cache has no rate for `currency`. */
+  price_aud: number | null;
+  in_stock: boolean;
+  created_at: string;
 }
 
 export interface ProductPriceSummary {

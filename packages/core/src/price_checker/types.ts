@@ -10,6 +10,12 @@ export interface PriceCheckUrlResult {
     product_url_id: number;
     url: string;
     retailer: string;
+    /**
+     * True if the scrape returned usable data this run. False rows are surfaced
+     * so the aggregator sees every URL's historical baseline even on failure
+     * (otherwise `previousLowest` would silently exclude the URL).
+     */
+    success: boolean;
     /** Native price as extracted from the retailer. */
     price: number | null;
     /** ISO 4217 code of the native price. */
@@ -18,11 +24,13 @@ export interface PriceCheckUrlResult {
     price_aud: number | null;
     in_stock: boolean;
     title: string | null;
-    source: UrlData['source'];
+    source: UrlData['source'] | 'failed';
     /** Previous native price for this URL. */
     previous_price: number | null;
     /** Previous price converted to AUD via the FX cache. null if no rate or no previous. */
     previous_price_aud: number | null;
+    /** In-stock state from the previous check for this URL. null if no previous. */
+    previous_in_stock: boolean | null;
 }
 
 export interface PriceCheckAggregatedData {
@@ -32,6 +40,10 @@ export interface PriceCheckAggregatedData {
     lowestPrice: number | null;
     /** Average price across URLs, in AUD. */
     averagePrice: number | null;
+    /** True if any URL is currently in stock. null if no URLs returned any data. */
+    currentlyInStock: boolean | null;
+    /** True if any URL was previously in stock. null if there is no previous data at all. */
+    previouslyInStock: boolean | null;
     checkedAt: string;
 }
 

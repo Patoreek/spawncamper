@@ -30,7 +30,32 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
         const urlData = await getDataFromUrl(productUrl.url);
         checkedCount++;
 
-        if (!urlData) continue;
+        // Look up the previous stored row regardless of current scrape outcome
+        // — failed-scrape rows still carry the URL's historical baseline so
+        // `previousLowest` doesn't silently exclude it.
+        const previous = getPreviousPriceCheck(productUrl.id);
+        const previousInStock = previous ? !!previous.in_stock : null;
+        const previousPrice = previous?.price ?? null;
+        const previousCurrency = previous?.currency ?? null;
+
+        if (!urlData) {
+            results.push({
+                product_url_id: productUrl.id,
+                url: productUrl.url,
+                retailer: productUrl.retailer,
+                success: false,
+                price: null,
+                currency: previousCurrency ?? 'AUD',
+                price_aud: null,
+                in_stock: false,
+                title: null,
+                source: 'failed',
+                previous_price: previousPrice,
+                previous_price_aud: convertToAudOrNull(previousPrice, previousCurrency),
+                previous_in_stock: previousInStock,
+            });
+            continue;
+        }
 
         // Make sure we have an AUD rate cached for this currency before we
         // persist anything — guarantees the read path can convert later.
@@ -40,13 +65,7 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
         }
 
         // Persist to price_checks if we got a valid price
-        let previousPrice: number | null = null;
-        let previousCurrency: string | null = null;
         if (urlData.price !== null) {
-            const previous = getPreviousPriceCheck(productUrl.id);
-            previousPrice = previous?.price ?? null;
-            previousCurrency = previous?.currency ?? null;
-
             createPriceCheck({
                 product_url_id: productUrl.id,
                 price: urlData.price,
@@ -59,6 +78,7 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
             product_url_id: productUrl.id,
             url: productUrl.url,
             retailer: productUrl.retailer,
+            success: true,
             price: urlData.price,
             currency: urlData.currency,
             price_aud: convertToAudOrNull(urlData.price, urlData.currency),
@@ -67,16 +87,30 @@ export const checkPrices = async (productId: number): Promise<PriceCheckAggregat
             source: urlData.source,
             previous_price: previousPrice,
             previous_price_aud: convertToAudOrNull(previousPrice, previousCurrency),
+            previous_in_stock: previousInStock,
         });
     }
 
     const audPrices = results.map((r) => r.price_aud).filter((p): p is number => p !== null);
+    // Current-state aggregates ignore failed scrapes — we don't know the URL's
+    // real current state on failure, so treating those URLs as out-of-stock
+    // would manufacture false negatives.
+    const successfulResults = results.filter((r) => r.success);
+    const currentlyInStock = successfulResults.length === 0 ? null : successfulResults.some((r) => r.in_stock);
+    // Prior-state aggregates use all results — stored data is valid regardless
+    // of whether this run's scrape succeeded.
+    const prevStockResults = results.filter((r) => r.previous_in_stock !== null);
+    const previouslyInStock = prevStockResults.length === 0
+        ? null
+        : prevStockResults.some((r) => r.previous_in_stock === true);
 
     const aggregated: PriceCheckAggregatedData = {
         productId,
         results,
         lowestPrice: audPrices.length ? Math.min(...audPrices) : null,
         averagePrice: audPrices.length ? audPrices.reduce((a, b) => a + b, 0) / audPrices.length : null,
+        currentlyInStock,
+        previouslyInStock,
         checkedAt: new Date().toISOString(),
     };
 
@@ -104,8 +138,12 @@ export const checkSingleUrl = async (productUrlId: number): Promise<PriceCheckUr
 
     let previousPrice: number | null = null;
     let previousCurrency: string | null = null;
+    let previousInStock: boolean | null = null;
+    const previous = getPreviousPriceCheck(productUrl.id);
+    if (previous) {
+        previousInStock = !!previous.in_stock;
+    }
     if (urlData.price !== null) {
-        const previous = getPreviousPriceCheck(productUrl.id);
         previousPrice = previous?.price ?? null;
         previousCurrency = previous?.currency ?? null;
 
@@ -121,6 +159,7 @@ export const checkSingleUrl = async (productUrlId: number): Promise<PriceCheckUr
         product_url_id: productUrl.id,
         url: productUrl.url,
         retailer: productUrl.retailer,
+        success: true,
         price: urlData.price,
         currency: urlData.currency,
         price_aud: convertToAudOrNull(urlData.price, urlData.currency),
@@ -129,6 +168,7 @@ export const checkSingleUrl = async (productUrlId: number): Promise<PriceCheckUr
         source: urlData.source,
         previous_price: previousPrice,
         previous_price_aud: convertToAudOrNull(previousPrice, previousCurrency),
+        previous_in_stock: previousInStock,
     };
 };
 

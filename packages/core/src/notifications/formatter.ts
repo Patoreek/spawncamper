@@ -35,6 +35,8 @@ const describeRule = (
     case 'target_price': return targetPrice !== null ? `when ≤ ${fmtPrice(targetPrice)}` : 'when price meets target';
     case 'percent_below_initial': return value !== null ? `when ${value}% below initial price` : 'when below initial';
     case 'absolute_below': return value !== null ? `when below ${fmtPrice(value)}` : 'when below threshold';
+    case 'back_in_stock': return 'when back in stock';
+    case 'out_of_stock': return 'when goes out of stock';
   }
 };
 
@@ -110,6 +112,54 @@ export const formatRecoveryMessage = (
     lines.push(`Rule: ${describeRule(rule.kind, rule.value, rule.targetPrice)}`);
   }
 
+  return lines.join('\n');
+};
+
+export const formatBackInStockMessage = (data: SummaryData): string => {
+  const { productName, rule, aggregated } = data;
+  const inStockResults = aggregated.results.filter((r) => r.in_stock);
+  const lowest = aggregated.lowestPrice;
+  const lowestResult = inStockResults.find((r) => r.price_aud === lowest);
+  const retailerTail = lowestResult?.retailer ? ` at ${lowestResult.retailer}` : '';
+
+  const lines: string[] = [];
+  lines.push(`*Back in stock:* ${productName}${retailerTail}`);
+  if (lowest !== null) {
+    lines.push('');
+    lines.push(`Currently ${fmtPrice(lowest)}${lowestResult?.retailer ? ` (${lowestResult.retailer})` : ''}`);
+  }
+
+  const urls = renderUrlList(aggregated.results, aggregated.lowestPrice);
+  if (urls) {
+    lines.push('');
+    lines.push(urls);
+  }
+
+  if (rule) {
+    lines.push('');
+    lines.push(`Rule: ${describeRule(rule.kind, rule.value, rule.targetPrice)}`);
+  }
+  return lines.join('\n');
+};
+
+export const formatOutOfStockMessage = (data: SummaryData): string => {
+  const { productName, rule, aggregated } = data;
+
+  const lines: string[] = [];
+  lines.push(`*Out of stock:* ${productName}`);
+  lines.push('');
+  lines.push('All retailers now showing out of stock.');
+
+  const urls = renderUrlList(aggregated.results, aggregated.lowestPrice);
+  if (urls) {
+    lines.push('');
+    lines.push(urls);
+  }
+
+  if (rule) {
+    lines.push('');
+    lines.push(`Rule: ${describeRule(rule.kind, rule.value, rule.targetPrice)}`);
+  }
   return lines.join('\n');
 };
 

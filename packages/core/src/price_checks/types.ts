@@ -28,3 +28,18 @@ export interface ProductPriceSummary {
     currentLowestCurrency: string | null;
     percentageDecrease: number | null;
 }
+
+/** One point on the per-product history chart. Joins price_checks + product_urls. */
+export interface PriceHistoryPoint {
+    id: number;
+    product_url_id: number;
+    retailer: string;
+    url: string;
+    /** Native price as stored. */
+    price: number;
+    currency: string;
+    /** Converted to AUD via the FX cache; null if no rate available. */
+    price_aud: number | null;
+    in_stock: boolean;
+    created_at: string;
+}

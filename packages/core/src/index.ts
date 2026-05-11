@@ -49,8 +49,15 @@ export {
   getAllPreviousPriceChecks,
   getLatestPriceChecksForProduct,
   getProductPriceSummary,
+  getProductPriceHistory,
 } from './price_checks/service';
-export type { PriceCheck, PriceCheckResult, LatestPriceCheck, ProductPriceSummary } from './price_checks/types';
+export type {
+  PriceCheck,
+  PriceCheckResult,
+  LatestPriceCheck,
+  ProductPriceSummary,
+  PriceHistoryPoint,
+} from './price_checks/types';
 
 // Notifications
 export {

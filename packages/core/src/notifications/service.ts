@@ -3,9 +3,12 @@ import { convertToAudOrNull } from '../fx/service';
 import { getProductById } from '../products/service';
 import { getLatestPriceChecksForProduct, getProductPriceSummary } from '../price_checks/service';
 import { NotificationDAL } from './dal';
+import { previousLowestFor } from './aggregate';
 import { decide, evaluateRule } from './evaluator';
 import {
   formatAlertMessage,
+  formatBackInStockMessage,
+  formatOutOfStockMessage,
   formatRecoveryMessage,
   formatTestMessage,
 } from './formatter';
@@ -15,8 +18,11 @@ import type {
   NotifyResult,
   SummaryData,
 } from './types';
-import type { Product } from '../products/types';
+import type { NotifyKind, Product } from '../products/types';
 import type { PriceCheckAggregatedData } from '../price_checker/types';
+
+const isStockRule = (k: NotifyKind): boolean =>
+  k === 'back_in_stock' || k === 'out_of_stock';
 
 const notificationDAL = new NotificationDAL(db);
 
@@ -49,13 +55,6 @@ const send = async (text: string): Promise<{ sent: boolean; skippedReason?: stri
   }
 };
 
-const previousLowestFor = (aggregated: PriceCheckAggregatedData): number | null => {
-  const prevPrices = aggregated.results
-    .map((r) => r.previous_price_aud)
-    .filter((p): p is number => p !== null && p !== undefined);
-  return prevPrices.length ? Math.min(...prevPrices) : null;
-};
-
 /**
  * Evaluate the product's notify rule against the latest price check result
  * and dispatch a notification if the state machine says so.
@@ -69,7 +68,8 @@ export const evaluateAndNotify = async (
   if (!product.notify_enabled || !product.notify_kind) {
     return { decision: { action: 'none' }, sent: false, skippedReason: 'disabled' };
   }
-  if (aggregated.lowestPrice === null) {
+  // Price rules need a current price to compare against; stock rules don't.
+  if (!isStockRule(product.notify_kind) && aggregated.lowestPrice === null) {
     return { decision: { action: 'none' }, sent: false, skippedReason: 'no_price' };
   }
 
@@ -84,6 +84,8 @@ export const evaluateAndNotify = async (
     currentLowest: aggregated.lowestPrice,
     initialPrice: summary.initialPrice,
     previousLowest: previousLowestFor(aggregated),
+    currentlyInStock: aggregated.currentlyInStock,
+    previouslyInStock: aggregated.previouslyInStock,
   };
 
   const evaluation = evaluateRule(ctx);
@@ -95,9 +97,18 @@ export const evaluateAndNotify = async (
   }
 
   const summaryData = buildSummaryData(product, aggregated);
-  const text = decision.action === 'alert'
-    ? formatAlertMessage(summaryData, decision.price, decision.previousLowest)
-    : formatRecoveryMessage(summaryData, decision.alertPrice, decision.price);
+  let text: string;
+  if (decision.action === 'alert') {
+    if (product.notify_kind === 'back_in_stock') {
+      text = formatBackInStockMessage(summaryData);
+    } else if (product.notify_kind === 'out_of_stock') {
+      text = formatOutOfStockMessage(summaryData);
+    } else {
+      text = formatAlertMessage(summaryData, decision.price, decision.previousLowest);
+    }
+  } else {
+    text = formatRecoveryMessage(summaryData, decision.alertPrice, decision.price);
+  }
 
   const result = await send(text);
   if (result.sent) {
@@ -130,6 +141,7 @@ export const sendTestMessage = async (productId: number): Promise<NotifyResult> 
     product_url_id: p.product_url_id,
     url: p.url,
     retailer: p.retailer,
+    success: true,
     price: p.price,
     currency: p.currency,
     price_aud: convertToAudOrNull(p.price, p.currency),
@@ -138,6 +150,7 @@ export const sendTestMessage = async (productId: number): Promise<NotifyResult> 
     source: 'selector',
     previous_price: null,
     previous_price_aud: null,
+    previous_in_stock: null,
   }));
   const audPrices = results.map((r) => r.price_aud).filter((p): p is number => p !== null);
 
@@ -146,6 +159,8 @@ export const sendTestMessage = async (productId: number): Promise<NotifyResult> 
     results,
     lowestPrice: audPrices.length ? Math.min(...audPrices) : null,
     averagePrice: audPrices.length ? audPrices.reduce((a, b) => a + b, 0) / audPrices.length : null,
+    currentlyInStock: results.length === 0 ? null : results.some((r) => r.in_stock),
+    previouslyInStock: null,
     checkedAt: latest[0]?.created_at ?? new Date().toISOString(),
   };
 

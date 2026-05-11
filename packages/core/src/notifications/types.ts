@@ -28,9 +28,14 @@ export interface RuleEvaluation {
 export interface EvaluateContext {
   productId: number;
   rule: { kind: NotifyKind; value: number | null; targetPrice: number | null };
-  currentLowest: number;
+  /** Lowest current price across URLs in AUD. null when no URL has a current price. */
+  currentLowest: number | null;
   initialPrice: number | null;
   previousLowest: number | null;
+  /** Any URL currently in stock? null = no scrape data this run. */
+  currentlyInStock: boolean | null;
+  /** Any URL previously in stock? null = no previous data at all. */
+  previouslyInStock: boolean | null;
 }
 
 export type NotifyDecision =

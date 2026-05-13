@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind, PriceHistoryPoint, UrlFailureSummary } from './types'
+import type { Product, ProductUrl, ProductStatus, LatestPriceCheck, CronStatus, UrlData, ProductPriceSummary, NotifyKind, PriceHistoryPoint, UrlFailureSummary, Category } from './types'
 import * as api from './api'
 import { PriceHistoryChart } from './PriceHistoryChart'
 import './App.css'
@@ -37,6 +37,14 @@ function App() {
   const [scanError, setScanError] = useState<string | null>(null)
   const [testingProduct, setTestingProduct] = useState<number | null>(null)
   const [testFeedback, setTestFeedback] = useState<{ productId: number; ok: boolean; message: string } | null>(null)
+  const [categories, setCategories] = useState<Category[]>([])
+
+  const loadCategories = async () => {
+    const data = await api.fetchCategories()
+    setCategories(data)
+  }
+
+  useEffect(() => { loadCategories() }, [])
 
   const loadProducts = async () => {
     const data = await api.fetchProducts(statusFilter || undefined)
@@ -144,6 +152,11 @@ function App() {
     await loadProducts()
   }
 
+  const handleCategoryChange = async (productId: number, categoryId: number | null) => {
+    await api.updateProductCategory(productId, categoryId)
+    await Promise.all([loadProducts(), loadCategories()])
+  }
+
   const handleScanUrl = async (productId: number, urlId: number) => {
     setScanningUrl(urlId)
     setScanError(null)
@@ -192,132 +205,330 @@ function App() {
 
       {showCreateForm && (
         <CreateProductForm
-          onCreated={() => { setShowCreateForm(false); loadProducts() }}
+          categories={categories}
+          onCreated={() => { setShowCreateForm(false); loadProducts(); loadCategories() }}
         />
       )}
 
       {products.length === 0 ? (
         <p className="empty-state">No products found. Create one to get started.</p>
       ) : (
-        <div className="product-table">
-          <div className="table-header">
-            <span className="col-name">Product</span>
-            <span className="col-status">Status</span>
-            <span className="col-price">Initial</span>
-            <span className="col-price">Lowest</span>
-            <span className="col-store">Best Store</span>
-            <span className="col-change">Change</span>
-            <span className="col-expand"></span>
-          </div>
-
-          {products.map((product) => {
-            const s = summaries[product.id]
-            const isExpanded = expandedProduct === product.id
-            const hasPriceData = s && s.initialPrice !== null
-
-            return (
-              <div key={product.id} className={`table-row-group ${isExpanded ? 'expanded' : ''}`}>
-                <div className="table-row" onClick={() => toggleExpand(product.id)}>
-                  <span className="col-name">
-                    <span className="product-name">{product.name}</span>
-                    {product.target_price != null && (
-                      <span className="target-price">Target: ${product.target_price.toFixed(2)}</span>
-                    )}
-                  </span>
-                  <span className="col-status">
-                    <StatusBadge status={product.status} />
-                  </span>
-                  <span className="col-price mono">
-                    {hasPriceData ? `$${s.initialPrice!.toFixed(2)}` : '--'}
-                  </span>
-                  <span className="col-price mono lowest-price">
-                    {hasPriceData ? `$${s.currentLowest!.toFixed(2)}` : '--'}
-                  </span>
-                  <span className="col-store">
-                    {hasPriceData && s.currentLowestRetailer ? s.currentLowestRetailer : '--'}
-                  </span>
-                  <span className="col-change">
-                    {hasPriceData ? (
-                      <ChangeIndicator value={s.percentageDecrease} />
-                    ) : '--'}
-                  </span>
-                  <span className="col-expand">
-                    <span className="expand-icon">{isExpanded ? '▾' : '▸'}</span>
-                  </span>
-                </div>
-
-                {isExpanded && (
-                  <div className="table-detail">
-                    <div className="product-actions">
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={(e) => { e.stopPropagation(); handleCheckPrices(product.id) }}
-                        disabled={checkingProduct === product.id}
-                      >
-                        {checkingProduct === product.id ? 'Checking...' : 'Check Prices'}
-                      </button>
-                      <button
-                        className="btn btn-sm btn-muted"
-                        onClick={(e) => { e.stopPropagation(); handleTestMessage(product.id) }}
-                        disabled={testingProduct === product.id}
-                        title="Send a summary message via Telegram"
-                      >
-                        {testingProduct === product.id ? 'Sending...' : 'Send Test Message'}
-                      </button>
-                      {testFeedback?.productId === product.id && (
-                        <span className={`test-feedback ${testFeedback.ok ? 'ok' : 'err'}`}>
-                          {testFeedback.message}
-                        </span>
-                      )}
-                      {product.status !== 'active' && (
-                        <button className="btn btn-sm btn-success" onClick={() => handleStatusChange(product.id, 'activate')}>Activate</button>
-                      )}
-                      {product.status === 'active' && (
-                        <button className="btn btn-sm btn-warn" onClick={() => handleStatusChange(product.id, 'pause')}>Pause</button>
-                      )}
-                      {product.status !== 'archived' && (
-                        <button className="btn btn-sm btn-muted" onClick={() => handleStatusChange(product.id, 'archive')}>Archive</button>
-                      )}
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteProduct(product.id)}>Delete</button>
-                    </div>
-
-                    <NotifyRuleEditor
-                      product={product}
-                      onSave={(rule) => handleSaveNotifyRule(product.id, rule)}
-                    />
-
-                    <div className="urls-section">
-                      <h4>URLs</h4>
-                      {scanError && <p className="scan-error">{scanError}</p>}
-                      <UrlList
-                        urls={urlsByProduct[product.id] ?? []}
-                        productId={product.id}
-                        onPause={handlePauseUrl}
-                        onDelete={handleDeleteUrl}
-                        onScan={handleScanUrl}
-                        scanningUrl={scanningUrl}
-                        getPriceForUrl={(urlId) => getPriceForUrl(product.id, urlId)}
-                        getFailureForUrl={(urlId) => getFailureForUrl(product.id, urlId)}
-                      />
-                      <AddUrlForm productId={product.id} onAdded={() => handleUrlAdded(product.id)} />
-                    </div>
-
-                    <div className="history-section">
-                      <h4>Price History (AUD)</h4>
-                      <PriceHistoryChart history={historyByProduct[product.id] ?? []} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <ProductTableGrouped
+          products={products}
+          categories={categories}
+          summaries={summaries}
+          expandedProduct={expandedProduct}
+          toggleExpand={toggleExpand}
+          checkingProduct={checkingProduct}
+          scanningUrl={scanningUrl}
+          scanError={scanError}
+          testingProduct={testingProduct}
+          testFeedback={testFeedback}
+          urlsByProduct={urlsByProduct}
+          historyByProduct={historyByProduct}
+          onCheckPrices={handleCheckPrices}
+          onTestMessage={handleTestMessage}
+          onStatusChange={handleStatusChange}
+          onDeleteProduct={handleDeleteProduct}
+          onSaveNotifyRule={handleSaveNotifyRule}
+          onCategoryChange={handleCategoryChange}
+          onPauseUrl={handlePauseUrl}
+          onDeleteUrl={handleDeleteUrl}
+          onScanUrl={handleScanUrl}
+          onUrlAdded={handleUrlAdded}
+          getPriceForUrl={getPriceForUrl}
+          getFailureForUrl={getFailureForUrl}
+        />
       )}
     </div>
   )
 }
 
 // ── Sub-components ──────────────────────────────────────
+
+function ProductTableGrouped({
+  products, categories, summaries, expandedProduct, toggleExpand,
+  checkingProduct, scanningUrl, scanError, testingProduct, testFeedback,
+  urlsByProduct, historyByProduct,
+  onCheckPrices, onTestMessage, onStatusChange, onDeleteProduct,
+  onSaveNotifyRule, onCategoryChange, onPauseUrl, onDeleteUrl, onScanUrl, onUrlAdded,
+  getPriceForUrl, getFailureForUrl,
+}: {
+  products: Product[]
+  categories: Category[]
+  summaries: Record<number, ProductPriceSummary>
+  expandedProduct: number | null
+  toggleExpand: (id: number) => void
+  checkingProduct: number | null
+  scanningUrl: number | null
+  scanError: string | null
+  testingProduct: number | null
+  testFeedback: { productId: number; ok: boolean; message: string } | null
+  urlsByProduct: Record<number, ProductUrl[]>
+  historyByProduct: Record<number, PriceHistoryPoint[]>
+  onCheckPrices: (id: number) => void
+  onTestMessage: (id: number) => void
+  onStatusChange: (id: number, action: 'pause' | 'activate' | 'archive') => void
+  onDeleteProduct: (id: number) => void
+  onSaveNotifyRule: (id: number, rule: { enabled: boolean; kind: NotifyKind | null; value: number | null }) => Promise<void>
+  onCategoryChange: (id: number, categoryId: number | null) => void
+  onPauseUrl: (productId: number, urlId: number) => void
+  onDeleteUrl: (productId: number, urlId: number) => void
+  onScanUrl: (productId: number, urlId: number) => void
+  onUrlAdded: (productId: number) => void
+  getPriceForUrl: (productId: number, urlId: number) => LatestPriceCheck | undefined
+  getFailureForUrl: (productId: number, urlId: number) => UrlFailureSummary | undefined
+}) {
+  // Build a map from category id to name
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
+
+  // Group products: keyed by category name (or 'Uncategorised')
+  const grouped = new Map<string, Product[]>()
+  for (const p of products) {
+    const catName = p.category_id ? (categoryMap.get(p.category_id) ?? 'Uncategorised') : 'Uncategorised'
+    if (!grouped.has(catName)) grouped.set(catName, [])
+    grouped.get(catName)!.push(p)
+  }
+
+  // Sort groups: named categories alphabetically, then Uncategorised last
+  const sortedGroups = [...grouped.entries()].sort((a, b) => {
+    if (a[0] === 'Uncategorised') return 1
+    if (b[0] === 'Uncategorised') return -1
+    return a[0].localeCompare(b[0])
+  })
+
+  const renderProductRow = (product: Product) => {
+    const s = summaries[product.id]
+    const isExpanded = expandedProduct === product.id
+    const hasPriceData = s && s.initialPrice !== null
+
+    return (
+      <div key={product.id} className={`table-row-group ${isExpanded ? 'expanded' : ''}`}>
+        <div className="table-row" onClick={() => toggleExpand(product.id)}>
+          <span className="col-name">
+            <span className="product-name">{product.name}</span>
+            {product.target_price != null && (
+              <span className="target-price">Target: ${product.target_price.toFixed(2)}</span>
+            )}
+          </span>
+          <span className="col-status">
+            <StatusBadge status={product.status} />
+          </span>
+          <span className="col-price mono">
+            {hasPriceData ? `$${s.initialPrice!.toFixed(2)}` : '--'}
+          </span>
+          <span className="col-price mono lowest-price">
+            {hasPriceData ? `$${s.currentLowest!.toFixed(2)}` : '--'}
+          </span>
+          <span className="col-store">
+            {hasPriceData && s.currentLowestRetailer ? s.currentLowestRetailer : '--'}
+          </span>
+          <span className="col-change">
+            {hasPriceData ? (
+              <ChangeIndicator value={s.percentageDecrease} />
+            ) : '--'}
+          </span>
+          <span className="col-expand">
+            <span className="expand-icon">{isExpanded ? '▾' : '▸'}</span>
+          </span>
+        </div>
+
+        {isExpanded && (
+          <div className="table-detail">
+            <div className="product-actions">
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={(e) => { e.stopPropagation(); onCheckPrices(product.id) }}
+                disabled={checkingProduct === product.id}
+              >
+                {checkingProduct === product.id ? 'Checking...' : 'Check Prices'}
+              </button>
+              <button
+                className="btn btn-sm btn-muted"
+                onClick={(e) => { e.stopPropagation(); onTestMessage(product.id) }}
+                disabled={testingProduct === product.id}
+                title="Send a summary message via Telegram"
+              >
+                {testingProduct === product.id ? 'Sending...' : 'Send Test Message'}
+              </button>
+              {testFeedback?.productId === product.id && (
+                <span className={`test-feedback ${testFeedback.ok ? 'ok' : 'err'}`}>
+                  {testFeedback.message}
+                </span>
+              )}
+              {product.status !== 'active' && (
+                <button className="btn btn-sm btn-success" onClick={() => onStatusChange(product.id, 'activate')}>Activate</button>
+              )}
+              {product.status === 'active' && (
+                <button className="btn btn-sm btn-warn" onClick={() => onStatusChange(product.id, 'pause')}>Pause</button>
+              )}
+              {product.status !== 'archived' && (
+                <button className="btn btn-sm btn-muted" onClick={() => onStatusChange(product.id, 'archive')}>Archive</button>
+              )}
+              <button className="btn btn-sm btn-danger" onClick={() => onDeleteProduct(product.id)}>Delete</button>
+            </div>
+
+            <CategorySelector
+              categories={categories}
+              currentCategoryId={product.category_id}
+              onChange={(catId) => onCategoryChange(product.id, catId)}
+            />
+
+            <NotifyRuleEditor
+              product={product}
+              onSave={(rule) => onSaveNotifyRule(product.id, rule)}
+            />
+
+            <div className="urls-section">
+              <h4>URLs</h4>
+              {scanError && <p className="scan-error">{scanError}</p>}
+              <UrlList
+                urls={urlsByProduct[product.id] ?? []}
+                productId={product.id}
+                onPause={onPauseUrl}
+                onDelete={onDeleteUrl}
+                onScan={onScanUrl}
+                scanningUrl={scanningUrl}
+                getPriceForUrl={(urlId) => getPriceForUrl(product.id, urlId)}
+                getFailureForUrl={(urlId) => getFailureForUrl(product.id, urlId)}
+              />
+              <AddUrlForm productId={product.id} onAdded={() => onUrlAdded(product.id)} />
+            </div>
+
+            <div className="history-section">
+              <h4>Price History (AUD)</h4>
+              <PriceHistoryChart history={historyByProduct[product.id] ?? []} />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="product-tables">
+      {sortedGroups.map(([groupName, groupProducts]) => {
+        let totalInitial = 0
+        let totalLowest = 0
+        let hasAnyPrice = false
+        for (const p of groupProducts) {
+          const s = summaries[p.id]
+          if (s && s.initialPrice !== null && s.currentLowest !== null) {
+            totalInitial += s.initialPrice
+            totalLowest += s.currentLowest
+            hasAnyPrice = true
+          }
+        }
+        const totalChange = hasAnyPrice && totalInitial > 0
+          ? ((totalInitial - totalLowest) / totalInitial) * 100
+          : null
+
+        return (
+          <div key={groupName} className="category-group">
+            <h3 className="category-heading">{groupName}</h3>
+            <div className="product-table">
+              <div className="table-header">
+                <span className="col-name">Product</span>
+                <span className="col-status">Status</span>
+                <span className="col-price">Initial</span>
+                <span className="col-price">Lowest</span>
+                <span className="col-store">Best Store</span>
+                <span className="col-change">Change</span>
+                <span className="col-expand"></span>
+              </div>
+              {groupProducts.map(renderProductRow)}
+              {hasAnyPrice && (
+                <div className="table-row table-total-row">
+                  <span className="col-name">
+                    <span className="total-label">Total</span>
+                  </span>
+                  <span className="col-status"></span>
+                  <span className="col-price mono">${totalInitial.toFixed(2)}</span>
+                  <span className="col-price mono lowest-price">${totalLowest.toFixed(2)}</span>
+                  <span className="col-store"></span>
+                  <span className="col-change">
+                    {totalChange !== null ? <ChangeIndicator value={totalChange} /> : '--'}
+                  </span>
+                  <span className="col-expand"></span>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function CategorySelector({
+  categories,
+  currentCategoryId,
+  onChange,
+}: {
+  categories: Category[]
+  currentCategoryId: number | null
+  onChange: (categoryId: number | null) => void
+}) {
+  const [mode, setMode] = useState<'select' | 'create'>('select')
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    if (val === '__new__') {
+      setMode('create')
+      return
+    }
+    onChange(val === '' ? null : Number(val))
+  }
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setSaving(true)
+    const cat = await api.createCategory(newName.trim())
+    setNewName('')
+    setMode('select')
+    setSaving(false)
+    onChange(cat.id)
+  }
+
+  return (
+    <div className="category-section">
+      <h4>Category</h4>
+      {mode === 'select' ? (
+        <select
+          className="category-select"
+          value={currentCategoryId ?? ''}
+          onChange={handleChange}
+        >
+          <option value="">Uncategorised</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+          <option value="__new__">+ Create new...</option>
+        </select>
+      ) : (
+        <form className="category-create-form" onSubmit={handleCreate}>
+          <input
+            type="text"
+            placeholder="New category name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            autoFocus
+            required
+          />
+          <button className="btn btn-xs btn-primary" type="submit" disabled={saving}>
+            {saving ? 'Creating...' : 'Create'}
+          </button>
+          <button className="btn btn-xs btn-muted" type="button" onClick={() => setMode('select')}>
+            Cancel
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
 
 function ChangeIndicator({ value }: { value: number | null }) {
   if (value === null || value === 0) return <span className="change-neutral">0%</span>
@@ -478,21 +689,47 @@ function UrlScanner() {
   )
 }
 
-function CreateProductForm({ onCreated }: { onCreated: () => void }) {
+function CreateProductForm({ categories, onCreated }: { categories: Category[]; onCreated: () => void }) {
   const [name, setName] = useState('')
   const [targetPrice, setTargetPrice] = useState('')
+  const [categoryMode, setCategoryMode] = useState<'select' | 'create'>('select')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
+  const [newCategoryName, setNewCategoryName] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value
+    if (val === '__new__') {
+      setCategoryMode('create')
+      setSelectedCategoryId('')
+      return
+    }
+    setSelectedCategoryId(val)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     setSubmitting(true)
+
+    let categoryId: number | null = null
+    if (categoryMode === 'create' && newCategoryName.trim()) {
+      const cat = await api.createCategory(newCategoryName.trim())
+      categoryId = cat.id
+    } else if (selectedCategoryId) {
+      categoryId = Number(selectedCategoryId)
+    }
+
     await api.createProduct({
       name: name.trim(),
       target_price: targetPrice ? Number(targetPrice) : null,
+      category_id: categoryId,
     })
     setName('')
     setTargetPrice('')
+    setSelectedCategoryId('')
+    setNewCategoryName('')
+    setCategoryMode('select')
     setSubmitting(false)
     onCreated()
   }
@@ -515,6 +752,28 @@ function CreateProductForm({ onCreated }: { onCreated: () => void }) {
           value={targetPrice}
           onChange={(e) => setTargetPrice(e.target.value)}
         />
+        {categoryMode === 'select' ? (
+          <select value={selectedCategoryId} onChange={handleCategoryChange}>
+            <option value="">No category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+            <option value="__new__">+ Create new...</option>
+          </select>
+        ) : (
+          <div className="inline-create-category">
+            <input
+              type="text"
+              placeholder="New category name"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              autoFocus
+            />
+            <button className="btn btn-xs btn-muted" type="button" onClick={() => setCategoryMode('select')}>
+              Cancel
+            </button>
+          </div>
+        )}
         <button className="btn btn-primary" type="submit" disabled={submitting}>
           {submitting ? 'Creating...' : 'Create'}
         </button>

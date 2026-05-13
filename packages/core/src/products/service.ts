@@ -63,3 +63,7 @@ export const deleteProduct = async (id: number) => {
 export const getAllProducts = (status: string | null = null): Product[] => {
   return productDAL.findAll(status);
 };
+
+export const updateProductCategory = (id: number, categoryId: number | null): Product | null => {
+  return productDAL.updateCategory(id, categoryId);
+};

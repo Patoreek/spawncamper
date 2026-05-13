@@ -12,12 +12,13 @@ export class ProductDAL {
   private readonly archiveProductStmt: Database.Statement;
   private readonly deleteProductStmt: Database.Statement;
   private readonly updateNotifyRuleStmt: Database.Statement;
+  private readonly updateCategoryStmt: Database.Statement;
 
   constructor(db: Database.Database) {
     // Prepare once, reuse forever — much faster than re-preparing per call
     this.createStmt = db.prepare(`
-      INSERT INTO products (name, target_price, status)
-      VALUES (@name, @target_price, @status)
+      INSERT INTO products (name, target_price, status, category_id)
+      VALUES (@name, @target_price, @status, @category_id)
       RETURNING *
     `);
     this.findByIdStmt = db.prepare(`SELECT * FROM products WHERE id = @id`);
@@ -55,6 +56,13 @@ export class ProductDAL {
       WHERE id = @id
       RETURNING *
     `);
+    this.updateCategoryStmt = db.prepare(`
+      UPDATE products
+      SET category_id = @category_id,
+          updated_at  = CURRENT_TIMESTAMP
+      WHERE id = @id
+      RETURNING *
+    `);
   }
 
   create(input: CreateProductInput): Product {
@@ -62,6 +70,7 @@ export class ProductDAL {
       name: input.name,
       target_price: input.target_price ?? null,
       status: input.status ?? 'active',
+      category_id: input.category_id ?? null,
     }) as Product;
   }
 
@@ -159,5 +168,11 @@ export class ProductDAL {
     };
   };
 
+  updateCategory(id: number, categoryId: number | null): Product | null {
+    return (this.updateCategoryStmt.get({
+      id,
+      category_id: categoryId,
+    }) as Product | undefined) ?? null;
+  }
 
 }

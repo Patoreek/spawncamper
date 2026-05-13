@@ -9,6 +9,7 @@ import {
   archiveProduct,
   deleteProduct,
   updateNotifyRule,
+  updateProductCategory,
   createProductUrl,
   getProductUrlById,
   getProductUrlsForProduct,
@@ -31,6 +32,8 @@ import {
   getFailureSummaryForUrl,
   getFailureSummariesForProduct,
   sendDigest,
+  getAllCategories,
+  createCategory,
 } from '@spawncamper/core';
 
 const app = new Hono();
@@ -49,6 +52,22 @@ sweepStaleRunning();
 // Schedule string is owned by `@spawncamper/scheduler`; mirrored here purely
 // for display in the status panel. Keep in sync if the scheduler changes.
 const SCHEDULE_DESCRIPTION = '20:30 daily (Australia/Sydney)';
+
+// ── Categories ─────────────────────────────────────────
+
+app.get('/api/categories', (c) => {
+  return c.json(getAllCategories());
+});
+
+app.post('/api/categories', async (c) => {
+  const body = await c.req.json();
+  const name = body.name;
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return c.json({ success: false, error: { code: 'BAD_REQUEST', message: 'name is required' } }, 400);
+  }
+  const category = createCategory(name.trim());
+  return c.json(category, 201);
+});
 
 // ── Products ────────────────────────────────────────────
 
@@ -76,6 +95,17 @@ app.patch('/api/products/:id/activate', (c) => {
 app.patch('/api/products/:id/archive', (c) => {
   const id = Number(c.req.param('id'));
   return c.json(archiveProduct(id));
+});
+
+app.patch('/api/products/:id/category', async (c) => {
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json();
+  const categoryId = body.category_id === null || body.category_id === undefined ? null : Number(body.category_id);
+  const updated = updateProductCategory(id, categoryId);
+  if (!updated) {
+    return c.json({ success: false, error: { code: 'PRODUCT_NOT_FOUND', message: `No product with id ${id}` } }, 404);
+  }
+  return c.json(updated);
 });
 
 app.delete('/api/products/:id', (c) => {

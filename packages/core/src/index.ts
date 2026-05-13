@@ -8,6 +8,7 @@ export {
   archiveProduct,
   deleteProduct,
   updateNotifyRule,
+  updateProductCategory,
 } from './products/service';
 export type {
   Product,
@@ -107,6 +108,10 @@ export type {
 export { buildDigest, sendDigest } from './digest/service';
 export { formatDigest } from './digest/formatter';
 export type { DigestRow, DigestPayload, DigestSendResult } from './digest/types';
+
+// Categories
+export { getAllCategories, createCategory } from './categories/service';
+export type { Category, CreateCategoryInput } from './categories/types';
 
 // Types
 export type { ApiResponse, SuccessResponse, ErrorResponse } from './db/types';

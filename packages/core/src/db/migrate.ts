@@ -90,6 +90,12 @@ import type Database from 'better-sqlite3';
 
     CREATE INDEX IF NOT EXISTS idx_price_check_failures_url_time
       ON price_check_failures(product_url_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT    NOT NULL UNIQUE,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
   `;
 
   // Idempotent column additions for pre-existing databases.
@@ -99,6 +105,7 @@ import type Database from 'better-sqlite3';
     `ALTER TABLE products ADD COLUMN notify_kind TEXT`,
     `ALTER TABLE products ADD COLUMN notify_value REAL`,
     `ALTER TABLE notifications ADD COLUMN price REAL`,
+    `ALTER TABLE products ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`,
   ];
 
   export const migrate = (db: Database.Database) => {

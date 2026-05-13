@@ -19,6 +19,7 @@ export interface Product {
   name: string;
   target_price: number | null;
   status: ProductStatus;
+  category_id: number | null;
   notify_enabled: 0 | 1;
   notify_kind: NotifyKind | null;
   notify_value: number | null;
@@ -30,6 +31,13 @@ export interface CreateProductInput {
   name: string;
   target_price?: number | null;
   status?: ProductStatus;
+  category_id?: number | null;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  created_at: string;
 }
 
 export interface ProductUrl {

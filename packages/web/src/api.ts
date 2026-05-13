@@ -2,7 +2,7 @@ import type {
   Product, CreateProductInput, ProductUrl, CreateProductUrlInput,
   ApiResponse, LatestPriceCheck, PriceCheckAggregatedData,
   PriceCheckUrlResult, UrlData, CronStatus, ProductPriceSummary,
-  NotifyRuleInput, PriceHistoryPoint, UrlFailureSummary,
+  NotifyRuleInput, PriceHistoryPoint, UrlFailureSummary, Category,
 } from './types';
 
 // ── Products ────────────────────────────────────────────
@@ -122,6 +122,31 @@ export async function scanArbitraryUrl(url: string): Promise<UrlData> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
+  });
+  return res.json();
+}
+
+// ── Categories ─────────────────────────────────────────
+
+export async function fetchCategories(): Promise<Category[]> {
+  const res = await fetch('/api/categories');
+  return res.json();
+}
+
+export async function createCategory(name: string): Promise<Category> {
+  const res = await fetch('/api/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return res.json();
+}
+
+export async function updateProductCategory(id: number, categoryId: number | null): Promise<Product> {
+  const res = await fetch(`/api/products/${id}/category`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category_id: categoryId }),
   });
   return res.json();
 }

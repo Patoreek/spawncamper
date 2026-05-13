@@ -18,6 +18,7 @@ export interface CreateProductInput {
   name: string;
   target_price?: number | null;
   status?: ProductStatus;
+  category_id?: number | null;
 }
 
 export interface Product {
@@ -25,6 +26,7 @@ export interface Product {
   name: string;
   target_price: number | null;
   status: ProductStatus;
+  category_id: number | null;
   notify_enabled: 0 | 1;
   notify_kind: NotifyKind | null;
   notify_value: number | null;
@@ -42,6 +44,7 @@ export const mockProduct:Product = {
     name: "Test",
     target_price: 12.50,
     status: "active",
+    category_id: null,
     notify_enabled: 0,
     notify_kind: null,
     notify_value: null,

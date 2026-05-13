@@ -659,3 +659,119 @@
 .cron-error {
   color: #ef4444;
 }
+
+/* ── Category Groups ─────────────────────────────────── */
+
+.product-tables {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.category-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.category-heading {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+
+/* ── Total Row ───────────────────────────────────────── */
+
+.table-total-row {
+  border-top: 2px solid var(--border);
+  background: var(--code-bg);
+  cursor: default;
+}
+
+.table-total-row:hover {
+  background: var(--code-bg);
+}
+
+.total-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-h);
+}
+
+/* ── Category Section (in expanded detail) ────────────── */
+
+.category-section {
+  padding: 12px;
+  margin-bottom: 18px;
+  background: var(--card-bg, rgba(0, 0, 0, 0.02));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.category-section h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--text-h);
+  text-align: left;
+}
+
+.category-select {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.category-create-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.category-create-form input {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  min-width: 160px;
+}
+
+.category-create-form input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* ── Create Form: category select in form-row ────────── */
+
+.form-row select {
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+  min-width: 140px;
+}
+
+.inline-create-category {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+}
